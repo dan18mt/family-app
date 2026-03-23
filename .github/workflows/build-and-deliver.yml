@@ -51,6 +51,7 @@ jobs:
       - name: Decode release keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" \
+            | tr -d '\n' \
             | base64 --decode > "${{ github.workspace }}/release.jks"
 
       # ── 6. Write local.properties ────────────────────────────────────────────
