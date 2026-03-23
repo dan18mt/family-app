@@ -54,6 +54,14 @@ jobs:
             | tr -d '\n' \
             | base64 --decode > "${{ github.workspace }}/release.jks"
 
+      # ── 5b. Verify keystore ──────────────────────────────────────────────────
+      - name: Verify keystore
+        run: |
+          echo "Keystore file size: $(wc -c < "${{ github.workspace }}/release.jks") bytes"
+          keytool -list \
+            -keystore "${{ github.workspace }}/release.jks" \
+            -storepass "${{ secrets.KEYSTORE_PASSWORD }}"
+
       # ── 6. Write local.properties ────────────────────────────────────────────
       #    Points Gradle at the pre-installed SDK and bakes in the AI API key.
       #    Add ANTHROPIC_API_KEY to repo secrets so the AI chat works in the APK.
