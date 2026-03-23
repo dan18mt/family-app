@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Exclude the local DB and DataStore from cloud backup (family data is local-only) -->
+    <exclude domain="database" path="family_home.db" />
+    <exclude domain="sharedpref" path="." />
+</full-backup-content>

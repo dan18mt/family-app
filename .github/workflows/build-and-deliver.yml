@@ -1,0 +1,317 @@
+name: Build & Deliver
+
+# Runs on every push to main — builds a signed release APK, publishes a
+# GitHub Release, then emails the family with a direct download link.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deliver:
+    name: Build signed APK → Release → Email family
+    runs-on: ubuntu-latest
+
+    # Required so this job can create GitHub Releases and tags.
+    permissions:
+      contents: write
+
+    steps:
+
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # ── 2. Java / Gradle ─────────────────────────────────────────────────────
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle          # caches ~/.gradle between runs
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # ── 3. Extract version name from app/build.gradle.kts ───────────────────
+      - name: Extract version name
+        id: version
+        run: |
+          VERSION=$(grep -oP '(?<=versionName\s=\s")[^"]+' app/build.gradle.kts)
+          echo "name=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Extracted version: $VERSION"
+
+      # ── 4. Short commit SHA (used in email footer) ───────────────────────────
+      - name: Get short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      # ── 5. Decode keystore ───────────────────────────────────────────────────
+      #    In your repo secrets, set KEYSTORE_BASE64 to the output of:
+      #      base64 -w 0 your-release-key.jks
+      - name: Decode release keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" \
+            | base64 --decode > "${{ github.workspace }}/release.jks"
+
+      # ── 6. Write local.properties ────────────────────────────────────────────
+      #    Points Gradle at the pre-installed SDK and bakes in the AI API key.
+      #    Add ANTHROPIC_API_KEY to repo secrets so the AI chat works in the APK.
+      - name: Create local.properties
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> local.properties
+
+      # ── 7. Build signed release APK ──────────────────────────────────────────
+      #    We inject signing credentials at build time via Gradle properties so
+      #    the build.gradle.kts never needs to reference secrets directly.
+      - name: Assemble release APK
+        run: |
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file="${{ github.workspace }}/release.jks" \
+            -Pandroid.injected.signing.store.password="${{ secrets.KEYSTORE_PASSWORD }}" \
+            -Pandroid.injected.signing.key.alias="${{ secrets.KEY_ALIAS }}" \
+            -Pandroid.injected.signing.key.password="${{ secrets.KEY_PASSWORD }}"
+
+      # ── 8. Rename APK to a human-friendly filename ───────────────────────────
+      - name: Rename APK
+        id: apk
+        run: |
+          SOURCE=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          FILENAME="FamilyHome-v${{ steps.version.outputs.name }}.apk"
+          DEST="${{ github.workspace }}/$FILENAME"
+          cp "$SOURCE" "$DEST"
+          echo "path=$DEST"         >> "$GITHUB_OUTPUT"
+          echo "filename=$FILENAME" >> "$GITHUB_OUTPUT"
+
+      # ── 9. Create GitHub Release and upload APK ──────────────────────────────
+      #    Tag format: v{versionName}-build.{run_number} — always unique, so
+      #    repeated pushes with the same versionName don't collide.
+      - name: Create GitHub Release
+        id: release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   "v${{ steps.version.outputs.name }}-build.${{ github.run_number }}"
+          name:       "FamilyHome v${{ steps.version.outputs.name }}"
+          draft:      false
+          prerelease: false
+          files:      ${{ steps.apk.outputs.path }}
+          body: |
+            **FamilyHome v${{ steps.version.outputs.name }}** — automated build from `${{ steps.sha.outputs.short }}`
+
+            Download the APK attached below and install it on your Android phone.
+            Detailed install instructions are in the email sent to the family.
+
+      # ── 10. Email the family ─────────────────────────────────────────────────
+      #    FAMILY_EMAILS secret should be a comma-separated list of addresses:
+      #      mum@example.com,dad@example.com,kid@example.com
+      - name: Send install email to family
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port:    465
+          secure:         true
+          username:       ${{ secrets.GMAIL_ADDRESS }}
+          password:       ${{ secrets.GMAIL_APP_PASSWORD }}
+          subject:        "FamilyHome v${{ steps.version.outputs.name }} is ready to install \U0001F3E0"
+          to:             ${{ secrets.FAMILY_EMAILS }}
+          from:           "FamilyHome Updates <${{ secrets.GMAIL_ADDRESS }}>"
+          html_body: |
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>FamilyHome Update</title>
+            </head>
+            <body style="margin:0;padding:0;background-color:#f0f4f0;font-family:Arial,Helvetica,sans-serif;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f4f0;padding:32px 16px;">
+                <tr>
+                  <td align="center">
+                    <table width="100%" cellpadding="0" cellspacing="0"
+                           style="max-width:560px;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+
+                      <!-- ── Header ── -->
+                      <tr>
+                        <td style="background-color:#2E7D32;padding:28px 32px;">
+                          <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:-0.5px;">
+                            &#127968; FamilyHome
+                          </h1>
+                          <p style="margin:6px 0 0;color:#A5D6A7;font-size:14px;">
+                            A new version is ready for your phone
+                          </p>
+                        </td>
+                      </tr>
+
+                      <!-- ── Version badge ── -->
+                      <tr>
+                        <td style="padding:28px 32px 8px;">
+                          <p style="margin:0;font-size:11px;color:#999999;text-transform:uppercase;letter-spacing:1.5px;">
+                            New version
+                          </p>
+                          <p style="margin:4px 0 0;font-size:40px;font-weight:700;color:#2E7D32;line-height:1;">
+                            v${{ steps.version.outputs.name }}
+                          </p>
+                        </td>
+                      </tr>
+
+                      <!-- ── Download button ── -->
+                      <tr>
+                        <td style="padding:20px 32px 24px;">
+                          <a href="${{ steps.release.outputs.url }}"
+                             style="display:block;background-color:#2E7D32;color:#ffffff;text-align:center;
+                                    text-decoration:none;padding:17px 24px;border-radius:10px;
+                                    font-size:17px;font-weight:700;">
+                            &#11015; Download FamilyHome APK
+                          </a>
+                          <p style="margin:10px 0 0;font-size:12px;color:#bbbbbb;text-align:center;">
+                            ${{ steps.apk.outputs.filename }}
+                          </p>
+                        </td>
+                      </tr>
+
+                      <!-- ── Divider ── -->
+                      <tr>
+                        <td style="padding:0 32px;">
+                          <hr style="border:none;border-top:1px solid #eeeeee;margin:0;">
+                        </td>
+                      </tr>
+
+                      <!-- ── Install instructions ── -->
+                      <tr>
+                        <td style="padding:24px 32px 8px;">
+                          <h2 style="margin:0 0 18px;font-size:16px;font-weight:700;color:#333333;">
+                            How to install on your phone
+                          </h2>
+
+                          <!-- Step 1 -->
+                          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                            <tr>
+                              <td width="34" valign="top" style="padding-top:1px;">
+                                <span style="display:inline-block;width:24px;height:24px;background-color:#2E7D32;
+                                             border-radius:50%;text-align:center;color:#ffffff;font-size:12px;
+                                             font-weight:700;line-height:24px;">1</span>
+                              </td>
+                              <td style="color:#444444;font-size:14px;line-height:1.6;padding-left:8px;">
+                                Tap the green <strong>Download</strong> button above.
+                                It will open the release page in your browser.
+                              </td>
+                            </tr>
+                          </table>
+
+                          <!-- Step 2 -->
+                          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                            <tr>
+                              <td width="34" valign="top" style="padding-top:1px;">
+                                <span style="display:inline-block;width:24px;height:24px;background-color:#2E7D32;
+                                             border-radius:50%;text-align:center;color:#ffffff;font-size:12px;
+                                             font-weight:700;line-height:24px;">2</span>
+                              </td>
+                              <td style="color:#444444;font-size:14px;line-height:1.6;padding-left:8px;">
+                                On the release page, tap
+                                <strong>${{ steps.apk.outputs.filename }}</strong>
+                                to download the file.
+                              </td>
+                            </tr>
+                          </table>
+
+                          <!-- Step 3 -->
+                          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                            <tr>
+                              <td width="34" valign="top" style="padding-top:1px;">
+                                <span style="display:inline-block;width:24px;height:24px;background-color:#2E7D32;
+                                             border-radius:50%;text-align:center;color:#ffffff;font-size:12px;
+                                             font-weight:700;line-height:24px;">3</span>
+                              </td>
+                              <td style="color:#444444;font-size:14px;line-height:1.6;padding-left:8px;">
+                                Pull down the notification bar at the top of your screen
+                                and tap the downloaded file to open it.
+                              </td>
+                            </tr>
+                          </table>
+
+                          <!-- Step 4 -->
+                          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                            <tr>
+                              <td width="34" valign="top" style="padding-top:1px;">
+                                <span style="display:inline-block;width:24px;height:24px;background-color:#2E7D32;
+                                             border-radius:50%;text-align:center;color:#ffffff;font-size:12px;
+                                             font-weight:700;line-height:24px;">4</span>
+                              </td>
+                              <td style="color:#444444;font-size:14px;line-height:1.6;padding-left:8px;">
+                                If your phone shows a warning like <em>"blocked by Play Protect"</em>
+                                or asks for permission, tap <strong>Settings</strong> &#8594;
+                                enable <em>"Install unknown apps"</em> for your browser, then go back
+                                and try again.
+                              </td>
+                            </tr>
+                          </table>
+
+                          <!-- Step 5 -->
+                          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                            <tr>
+                              <td width="34" valign="top" style="padding-top:1px;">
+                                <span style="display:inline-block;width:24px;height:24px;background-color:#2E7D32;
+                                             border-radius:50%;text-align:center;color:#ffffff;font-size:12px;
+                                             font-weight:700;line-height:24px;">5</span>
+                              </td>
+                              <td style="color:#444444;font-size:14px;line-height:1.6;padding-left:8px;">
+                                Tap <strong>Install</strong>. The old version will be replaced automatically
+                                &#8212; <strong>your data and PIN are safe</strong>.
+                              </td>
+                            </tr>
+                          </table>
+
+                          <!-- Step 6 -->
+                          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:4px;">
+                            <tr>
+                              <td width="34" valign="top" style="padding-top:1px;">
+                                <span style="display:inline-block;width:24px;height:24px;background-color:#2E7D32;
+                                             border-radius:50%;text-align:center;color:#ffffff;font-size:12px;
+                                             font-weight:700;line-height:24px;">6</span>
+                              </td>
+                              <td style="color:#444444;font-size:14px;line-height:1.6;padding-left:8px;">
+                                Open <strong>FamilyHome</strong>, tap your name, enter your PIN, and you're in. &#127881;
+                              </td>
+                            </tr>
+                          </table>
+
+                        </td>
+                      </tr>
+
+                      <!-- ── Help note ── -->
+                      <tr>
+                        <td style="padding:16px 32px 24px;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="background-color:#f0f7f0;border-left:4px solid #81C784;
+                                         border-radius:4px;padding:12px 16px;">
+                                <p style="margin:0;font-size:13px;color:#555555;line-height:1.5;">
+                                  <strong>Need help?</strong> If it still does not install, ask Dad &#128578;
+                                  He can also share the APK file directly from his phone via WhatsApp or Bluetooth.
+                                </p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+
+                      <!-- ── Footer ── -->
+                      <tr>
+                        <td style="background-color:#f8faf8;padding:14px 32px;border-top:1px solid #eeeeee;">
+                          <p style="margin:0;font-size:11px;color:#bbbbbb;text-align:center;line-height:1.6;">
+                            Built automatically &#183; commit
+                            <a href="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+                               style="color:#2E7D32;text-decoration:none;">
+                              ${{ steps.sha.outputs.short }}
+                            </a>
+                            &#183; run #${{ github.run_number }}
+                          </p>
+                        </td>
+                      </tr>
+
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>

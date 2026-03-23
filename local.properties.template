@@ -1,0 +1,8 @@
+# Copy this file to local.properties and fill in your values.
+# local.properties is git-ignored — NEVER commit it.
+
+# Get your API key from https://console.anthropic.com
+ANTHROPIC_API_KEY=sk-ant-YOUR_KEY_HERE
+
+# SDK path (filled automatically by Android Studio)
+sdk.dir=C\:\\Users\\YourName\\AppData\\Local\\Android\\Sdk

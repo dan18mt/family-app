@@ -1,0 +1,30 @@
+package com.familyhome.app.di
+
+import android.content.Context
+import androidx.room.Room
+import com.familyhome.app.data.local.dao.*
+import com.familyhome.app.data.local.database.FamilyDatabase
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import javax.inject.Singleton
+
+@Module
+@InstallIn(SingletonComponent::class)
+object DatabaseModule {
+
+    @Provides @Singleton
+    fun provideDatabase(@ApplicationContext context: Context): FamilyDatabase =
+        Room.databaseBuilder(context, FamilyDatabase::class.java, FamilyDatabase.DATABASE_NAME)
+            .fallbackToDestructiveMigration() // swap for proper migrations before production
+            .build()
+
+    @Provides fun provideUserDao(db: FamilyDatabase):          UserDao          = db.userDao()
+    @Provides fun provideStockItemDao(db: FamilyDatabase):     StockItemDao     = db.stockItemDao()
+    @Provides fun provideChoreLogDao(db: FamilyDatabase):      ChoreLogDao      = db.choreLogDao()
+    @Provides fun provideRecurringTaskDao(db: FamilyDatabase): RecurringTaskDao = db.recurringTaskDao()
+    @Provides fun provideExpenseDao(db: FamilyDatabase):       ExpenseDao       = db.expenseDao()
+    @Provides fun provideBudgetDao(db: FamilyDatabase):        BudgetDao        = db.budgetDao()
+}

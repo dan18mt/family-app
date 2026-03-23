@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FamilyHome</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_stock">Pantry</string>
+    <string name="nav_chores">Chores</string>
+    <string name="nav_expenses">Expenses</string>
+    <string name="nav_chat">AI Chat</string>
+
+    <!-- Roles -->
+    <string name="role_father">Father</string>
+    <string name="role_wife">Wife</string>
+    <string name="role_kid">Kid</string>
+
+    <!-- Stock categories -->
+    <string name="category_food">Food</string>
+    <string name="category_cleaning">Cleaning</string>
+    <string name="category_toiletry">Toiletry</string>
+    <string name="category_other">Other</string>
+
+    <!-- Expense categories -->
+    <string name="expense_groceries">Groceries</string>
+    <string name="expense_transport">Transport</string>
+    <string name="expense_school">School</string>
+    <string name="expense_health">Health</string>
+    <string name="expense_entertainment">Entertainment</string>
+    <string name="expense_household">Household</string>
+    <string name="expense_other">Other</string>
+
+    <!-- Sync -->
+    <string name="sync_connected">Connected</string>
+    <string name="sync_disconnected">Not connected</string>
+    <string name="sync_last_synced">Last synced: %1$s</string>
+    <string name="sync_never">Never synced</string>
+    <string name="sync_in_progress">Syncing…</string>
+
+    <!-- General UI -->
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_add">Add</string>
+    <string name="action_confirm">Confirm</string>
+    <string name="error_generic">Something went wrong. Please try again.</string>
+    <string name="label_low_stock">Low stock</string>
+    <string name="label_budget_warning">Approaching budget limit</string>
+    <string name="pin_hint">Enter 4-digit PIN</string>
+    <string name="setup_welcome">Welcome! Let\'s set up your family.</string>
+</resources>
