@@ -51,7 +51,7 @@ jobs:
       - name: Decode release keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" \
-            | tr -d '\n' \
+            | tr -d '\n\r' \
             | base64 --decode > "${{ github.workspace }}/release.jks"
 
       # ── 5b. Verify keystore ──────────────────────────────────────────────────
