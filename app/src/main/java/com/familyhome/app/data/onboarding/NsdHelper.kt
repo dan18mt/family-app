@@ -61,10 +61,10 @@ class NsdHelper @Inject constructor(
             this.port        = port
         }
         val listener = object : NsdManager.RegistrationListener {
-            override fun onRegistrationFailed(s: NsdServiceInfo, e: Int)   = Log.e(TAG, "Registration failed: $e")
-            override fun onUnregistrationFailed(s: NsdServiceInfo, e: Int) = Log.e(TAG, "Unregistration failed: $e")
-            override fun onServiceRegistered(s: NsdServiceInfo)            = Log.d(TAG, "NSD registered: ${s.serviceName}")
-            override fun onServiceUnregistered(s: NsdServiceInfo)          = Log.d(TAG, "NSD unregistered: ${s.serviceName}")
+            override fun onRegistrationFailed(s: NsdServiceInfo, e: Int)   { Log.e(TAG, "Registration failed: $e") }
+            override fun onUnregistrationFailed(s: NsdServiceInfo, e: Int) { Log.e(TAG, "Unregistration failed: $e") }
+            override fun onServiceRegistered(s: NsdServiceInfo)            { Log.d(TAG, "NSD registered: ${s.serviceName}") }
+            override fun onServiceUnregistered(s: NsdServiceInfo)          { Log.d(TAG, "NSD unregistered: ${s.serviceName}") }
         }
         registrationListener = listener
         nsdManager.registerService(info, NsdManager.PROTOCOL_DNS_SD, listener)
@@ -83,10 +83,10 @@ class NsdHelper @Inject constructor(
         stopBrowsing()
         _discoveredDevices.value = emptyList()
         val listener = object : NsdManager.DiscoveryListener {
-            override fun onStartDiscoveryFailed(s: String, e: Int) = Log.e(TAG, "Discovery start failed: $e")
-            override fun onStopDiscoveryFailed(s: String, e: Int)  = Log.e(TAG, "Discovery stop failed: $e")
-            override fun onDiscoveryStarted(s: String)             = Log.d(TAG, "Discovery started: $s")
-            override fun onDiscoveryStopped(s: String)             = Log.d(TAG, "Discovery stopped: $s")
+            override fun onStartDiscoveryFailed(s: String, e: Int) { Log.e(TAG, "Discovery start failed: $e") }
+            override fun onStopDiscoveryFailed(s: String, e: Int)  { Log.e(TAG, "Discovery stop failed: $e") }
+            override fun onDiscoveryStarted(s: String)             { Log.d(TAG, "Discovery started: $s") }
+            override fun onDiscoveryStopped(s: String)             { Log.d(TAG, "Discovery stopped: $s") }
 
             override fun onServiceFound(serviceInfo: NsdServiceInfo) {
                 Log.d(TAG, "Service found: ${serviceInfo.serviceName}")
