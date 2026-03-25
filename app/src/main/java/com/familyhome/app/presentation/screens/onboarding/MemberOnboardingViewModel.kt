@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.familyhome.app.data.onboarding.InviteDto
 import com.familyhome.app.data.onboarding.JoinRequestDto
+import com.familyhome.app.data.onboarding.KnockDto
 import com.familyhome.app.data.onboarding.NsdHelper
 import com.familyhome.app.data.onboarding.OnboardingClient
 import com.familyhome.app.data.onboarding.OnboardingServer
@@ -20,7 +21,10 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.net.Inet4Address
+import java.net.NetworkInterface
 import java.security.MessageDigest
+import java.util.Collections
 import java.util.UUID
 import javax.inject.Inject
 
@@ -41,6 +45,7 @@ data class MemberOnboardingUiState(
     val confirmPin: String         = "",
     val error: String?             = null,
     val isLoading: Boolean         = false,
+    val knockSent: Boolean         = false,
 )
 
 @HiltViewModel
@@ -64,16 +69,39 @@ class MemberOnboardingViewModel @Inject constructor(
 
     private fun startListening() {
         val deviceName = Build.MODEL
+        val localIp = getLocalIpv4Address()
 
         // Start the small Ktor server that receives Father's invite
         onboardingServer.start(deviceName, deviceId)
 
-        // Advertise this device so Father can discover it
+        // Advertise this device so Father can discover it via NSD
         nsdHelper.startAdvertising(
             serviceName = "FamilyMember_${deviceId.take(8)}",
             port        = OnboardingServer.PORT,
             serviceType = NsdHelper.MEMBER_SERVICE_TYPE,
         )
+
+        // Also browse for Father so we can send a knock notification
+        nsdHelper.startBrowsing(NsdHelper.FATHER_SERVICE_TYPE)
+
+        // When Father is discovered, send a knock so they know a device wants to join
+        nsdHelper.discoveredDevices
+            .onEach { devices ->
+                val father = devices.firstOrNull()
+                if (father != null && !_state.value.knockSent && localIp.isNotBlank()) {
+                    val knock = KnockDto(
+                        deviceId   = deviceId,
+                        deviceName = deviceName,
+                        memberIp   = localIp,
+                        memberPort = OnboardingServer.PORT,
+                    )
+                    val success = onboardingClient.sendKnock(father.hostAddress, father.port, knock)
+                    if (success) {
+                        _state.update { it.copy(knockSent = true) }
+                    }
+                }
+            }
+            .launchIn(viewModelScope)
 
         // Observe incoming invite
         onboardingServer.receivedInvite
@@ -82,6 +110,17 @@ class MemberOnboardingViewModel @Inject constructor(
                 _state.update { it.copy(step = MemberOnboardingStep.InviteReceived, invite = invite) }
             }
             .launchIn(viewModelScope)
+    }
+
+    private fun getLocalIpv4Address(): String {
+        return try {
+            Collections.list(NetworkInterface.getNetworkInterfaces())
+                .flatMap { Collections.list(it.inetAddresses) }
+                .firstOrNull { !it.isLoopbackAddress && it is Inet4Address }
+                ?.hostAddress ?: ""
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     fun acceptInvite() {

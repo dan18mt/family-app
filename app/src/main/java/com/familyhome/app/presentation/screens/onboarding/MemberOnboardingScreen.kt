@@ -57,12 +57,21 @@ private fun ScanningStep(state: MemberOnboardingUiState) {
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(8.dp))
-        Text(
-            text      = "Make sure your phone is on the same WiFi as the Family Leader's device.\n\nAsk the Family Leader to open FamilyHome and send you an invite.",
-            style     = MaterialTheme.typography.bodyMedium,
-            color     = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
+        if (state.knockSent) {
+            Text(
+                text      = "Notification sent to the Family Leader.\n\nWaiting for them to send you an invite.",
+                style     = MaterialTheme.typography.bodyMedium,
+                color     = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        } else {
+            Text(
+                text      = "Make sure your phone is on the same WiFi as the Family Leader's device.\n\nAsk the Family Leader to open FamilyHome and send you an invite.",
+                style     = MaterialTheme.typography.bodyMedium,
+                color     = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
         Spacer(Modifier.height(32.dp))
         CircularProgressIndicator()
 

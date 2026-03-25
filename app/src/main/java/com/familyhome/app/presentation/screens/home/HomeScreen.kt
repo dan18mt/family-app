@@ -10,7 +10,9 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,6 +22,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.familyhome.app.data.onboarding.KnockDto
+import com.familyhome.app.domain.model.Role
 import com.familyhome.app.presentation.components.AvatarInitials
 import com.familyhome.app.presentation.components.LowStockBadge
 import com.familyhome.app.presentation.components.SectionHeader
@@ -34,8 +38,17 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(state.knockError) {
+        if (state.knockError != null) {
+            snackbarHostState.showSnackbar(state.knockError!!)
+            viewModel.dismissKnockError()
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -128,6 +141,18 @@ fun HomeScreen(
                 Spacer(Modifier.height(8.dp))
             }
 
+            // ── Join requests (Father only) ────────────────────────────────
+            if (state.currentUser?.role == Role.FATHER && state.pendingKnocks.isNotEmpty()) {
+                item { SectionHeader("Join Requests (${state.pendingKnocks.size})") }
+                items(state.pendingKnocks, key = { it.deviceId }) { knock ->
+                    JoinRequestKnockCard(
+                        knock     = knock,
+                        isLoading = state.invitingKnockIds.contains(knock.deviceId),
+                        onSendInvite = { viewModel.sendInviteFromKnock(knock) },
+                    )
+                }
+            }
+
             // ── Low-stock alerts ───────────────────────────────────────────
             if (state.lowStockItems.isNotEmpty()) {
                 item { SectionHeader("Low stock (${state.lowStockItems.size})") }
@@ -215,6 +240,39 @@ fun HomeScreen(
             }
         }
     }
+}
+
+@Composable
+private fun JoinRequestKnockCard(
+    knock: KnockDto,
+    isLoading: Boolean,
+    onSendInvite: () -> Unit,
+) {
+    ListItem(
+        headlineContent   = { Text(knock.deviceName, style = MaterialTheme.typography.bodyLarge) },
+        supportingContent = { Text("Wants to join your family") },
+        leadingContent = {
+            Box(
+                modifier         = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Default.PersonAdd,
+                    null,
+                    tint     = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        },
+        trailingContent = {
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+            } else {
+                Button(onClick = onSendInvite) { Text("Invite") }
+            }
+        },
+    )
 }
 
 @Composable

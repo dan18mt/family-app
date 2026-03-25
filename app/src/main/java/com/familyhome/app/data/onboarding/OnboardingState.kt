@@ -21,6 +21,9 @@ class OnboardingState @Inject constructor() {
     private val _approvals = MutableStateFlow<Map<String, ApprovalStatusDto>>(emptyMap())
     val approvals: StateFlow<Map<String, ApprovalStatusDto>> = _approvals.asStateFlow()
 
+    private val _pendingKnocks = MutableStateFlow<List<KnockDto>>(emptyList())
+    val pendingKnocks: StateFlow<List<KnockDto>> = _pendingKnocks.asStateFlow()
+
     fun addJoinRequest(request: JoinRequestDto) {
         _pendingRequests.update { list ->
             if (list.any { it.deviceId == request.deviceId }) list else list + request
@@ -35,8 +38,19 @@ class OnboardingState @Inject constructor() {
     fun getApprovalStatus(deviceId: String): ApprovalStatusDto =
         _approvals.value[deviceId] ?: ApprovalStatusDto(status = "pending")
 
+    fun addKnock(knock: KnockDto) {
+        _pendingKnocks.update { list ->
+            if (list.any { it.deviceId == knock.deviceId }) list else list + knock
+        }
+    }
+
+    fun removeKnock(deviceId: String) {
+        _pendingKnocks.update { it.filter { k -> k.deviceId != deviceId } }
+    }
+
     fun clear() {
         _pendingRequests.value = emptyList()
         _approvals.value = emptyMap()
+        _pendingKnocks.value = emptyList()
     }
 }

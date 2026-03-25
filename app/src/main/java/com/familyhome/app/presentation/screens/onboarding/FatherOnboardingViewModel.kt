@@ -1,14 +1,13 @@
 package com.familyhome.app.presentation.screens.onboarding
 
-import android.content.Context
-import android.net.wifi.WifiManager
-import android.os.Build
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.familyhome.app.data.onboarding.DeviceInfoDto
 import com.familyhome.app.data.onboarding.DiscoveredDevice
 import com.familyhome.app.data.onboarding.InviteDto
 import com.familyhome.app.data.onboarding.JoinRequestDto
+import com.familyhome.app.data.onboarding.KnockDto
 import com.familyhome.app.data.onboarding.NsdHelper
 import com.familyhome.app.data.onboarding.OnboardingClient
 import com.familyhome.app.data.onboarding.OnboardingState
@@ -17,8 +16,6 @@ import com.familyhome.app.data.sync.SyncServer
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -26,6 +23,9 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.net.Inet4Address
+import java.net.NetworkInterface
+import java.util.Collections
 import javax.inject.Inject
 
 sealed class FatherOnboardingStep {
@@ -47,13 +47,13 @@ data class FatherOnboardingUiState(
     val localIp: String                    = "",
     val discoveredDevices: List<DiscoveredDeviceUi> = emptyList(),
     val pendingRequests: List<JoinRequestDto>       = emptyList(),
+    val pendingKnocks: List<KnockDto>               = emptyList(),
     val isLoadingInvite: Set<String>                = emptySet(),
     val error: String?                     = null,
 )
 
 @HiltViewModel
 class FatherOnboardingViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val nsdHelper: NsdHelper,
     private val onboardingClient: OnboardingClient,
     private val onboardingState: OnboardingState,
@@ -116,6 +116,11 @@ class FatherOnboardingViewModel @Inject constructor(
         // Mirror pending join requests from OnboardingState
         onboardingState.pendingRequests
             .onEach { requests -> _state.update { it.copy(pendingRequests = requests) } }
+            .launchIn(viewModelScope)
+
+        // Mirror pending knocks (member-initiated join notifications)
+        onboardingState.pendingKnocks
+            .onEach { knocks -> _state.update { it.copy(pendingKnocks = knocks) } }
             .launchIn(viewModelScope)
     }
 
@@ -180,26 +185,53 @@ class FatherOnboardingViewModel @Inject constructor(
         syncServer.rejectRequest(request.deviceId)
     }
 
+    fun sendInviteToKnock(knock: KnockDto) {
+        val s = _state.value
+        if (s.fatherName.isBlank() || s.localIp.isBlank()) {
+            _state.update { it.copy(error = "Father profile not ready. Please wait.") }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(isLoadingInvite = it.isLoadingInvite + knock.deviceId) }
+            val invite = InviteDto(
+                fatherName = s.fatherName,
+                familyId   = s.fatherId,
+                fatherIp   = s.localIp,
+                fatherPort = 8765,
+            )
+            val success = onboardingClient.sendInvite(
+                ip     = knock.memberIp,
+                port   = knock.memberPort,
+                invite = invite,
+            )
+            _state.update { it.copy(isLoadingInvite = it.isLoadingInvite - knock.deviceId) }
+            if (success) {
+                onboardingState.removeKnock(knock.deviceId)
+            } else {
+                _state.update { it.copy(error = "Could not reach ${knock.deviceName}") }
+            }
+        }
+    }
+
     fun finish() {
         _state.update { it.copy(step = FatherOnboardingStep.Done) }
     }
 
     override fun onCleared() {
         super.onCleared()
-        nsdHelper.stopAll()
+        // Only stop browsing; advertising is handed off to HomeViewModel once Father reaches Home
+        nsdHelper.stopBrowsing()
     }
 
     private fun getLocalIpAddress(): String {
-        @Suppress("DEPRECATION")
-        val wm = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        @Suppress("DEPRECATION")
-        val ip = wm.connectionInfo.ipAddress
-        return String.format(
-            "%d.%d.%d.%d",
-            ip and 0xff,
-            ip shr 8  and 0xff,
-            ip shr 16 and 0xff,
-            ip shr 24 and 0xff,
-        )
+        return try {
+            Collections.list(NetworkInterface.getNetworkInterfaces())
+                .flatMap { Collections.list(it.inetAddresses) }
+                .firstOrNull { !it.isLoopbackAddress && it is Inet4Address }
+                ?.hostAddress ?: ""
+        } catch (e: Exception) {
+            Log.e("FatherOnboarding", "Failed to get local IP", e)
+            ""
+        }
     }
 }

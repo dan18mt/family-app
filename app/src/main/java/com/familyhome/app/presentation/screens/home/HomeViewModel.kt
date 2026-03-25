@@ -1,7 +1,13 @@
 package com.familyhome.app.presentation.screens.home
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.familyhome.app.data.onboarding.InviteDto
+import com.familyhome.app.data.onboarding.KnockDto
+import com.familyhome.app.data.onboarding.NsdHelper
+import com.familyhome.app.data.onboarding.OnboardingClient
+import com.familyhome.app.data.onboarding.OnboardingState
 import com.familyhome.app.domain.model.StockItem
 import com.familyhome.app.domain.model.User
 import com.familyhome.app.data.sync.SyncRepositoryImpl
@@ -13,6 +19,9 @@ import com.familyhome.app.domain.usecase.user.GetFamilyMembersUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.net.Inet4Address
+import java.net.NetworkInterface
+import java.util.Collections
 import javax.inject.Inject
 
 data class HomeUiState(
@@ -21,6 +30,9 @@ data class HomeUiState(
     val lowStockItems: List<StockItem> = emptyList(),
     val budgetAlerts: List<CheckBudgetAlertUseCase.BudgetAlert> = emptyList(),
     val isLoading: Boolean = true,
+    val pendingKnocks: List<KnockDto> = emptyList(),
+    val invitingKnockIds: Set<String> = emptySet(),
+    val knockError: String? = null,
 )
 
 @HiltViewModel
@@ -30,6 +42,9 @@ class HomeViewModel @Inject constructor(
     private val getLowStockItemsUseCase: GetLowStockItemsUseCase,
     private val checkBudgetAlertUseCase: CheckBudgetAlertUseCase,
     private val syncRepository: SyncRepositoryImpl,
+    private val nsdHelper: NsdHelper,
+    private val onboardingClient: OnboardingClient,
+    private val onboardingState: OnboardingState,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -45,9 +60,14 @@ class HomeViewModel @Inject constructor(
             _state.update { it.copy(currentUser = currentUser) }
 
             if (currentUser != null) {
-                // Father's sync server starts automatically — no manual toggle needed
+                // Father's sync server and NSD advertising start automatically
                 if (currentUser.role == Role.FATHER) {
                     syncRepository.startHostServer()
+                    nsdHelper.startAdvertising(
+                        serviceName = "FamilyHome_Host",
+                        port        = 8765,
+                        serviceType = NsdHelper.FATHER_SERVICE_TYPE,
+                    )
                 }
                 val alerts = checkBudgetAlertUseCase(currentUser.id)
                 _state.update { it.copy(budgetAlerts = alerts) }
@@ -65,6 +85,58 @@ class HomeViewModel @Inject constructor(
             getLowStockItemsUseCase().collect { items ->
                 _state.update { it.copy(lowStockItems = items) }
             }
+        }
+
+        viewModelScope.launch {
+            onboardingState.pendingKnocks.collect { knocks ->
+                _state.update { it.copy(pendingKnocks = knocks) }
+            }
+        }
+    }
+
+    fun sendInviteFromKnock(knock: KnockDto) {
+        val father = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(invitingKnockIds = it.invitingKnockIds + knock.deviceId, knockError = null) }
+            val localIp = getLocalIpv4Address()
+            if (localIp.isBlank()) {
+                _state.update { it.copy(invitingKnockIds = it.invitingKnockIds - knock.deviceId, knockError = "Could not determine local IP address.") }
+                return@launch
+            }
+            val invite = InviteDto(
+                fatherName = father.name,
+                familyId   = father.id,
+                fatherIp   = localIp,
+                fatherPort = 8765,
+            )
+            val success = onboardingClient.sendInvite(knock.memberIp, knock.memberPort, invite)
+            _state.update { it.copy(invitingKnockIds = it.invitingKnockIds - knock.deviceId) }
+            if (success) {
+                onboardingState.removeKnock(knock.deviceId)
+            } else {
+                _state.update { it.copy(knockError = "Could not reach ${knock.deviceName}. Make sure both devices are on the same WiFi.") }
+            }
+        }
+    }
+
+    fun dismissKnockError() {
+        _state.update { it.copy(knockError = null) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        nsdHelper.stopAdvertising()
+    }
+
+    private fun getLocalIpv4Address(): String {
+        return try {
+            Collections.list(NetworkInterface.getNetworkInterfaces())
+                .flatMap { Collections.list(it.inetAddresses) }
+                .firstOrNull { !it.isLoopbackAddress && it is Inet4Address }
+                ?.hostAddress ?: ""
+        } catch (e: Exception) {
+            Log.e("HomeViewModel", "Failed to get local IP", e)
+            ""
         }
     }
 }

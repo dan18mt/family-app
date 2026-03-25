@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
@@ -17,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.familyhome.app.data.onboarding.JoinRequestDto
+import com.familyhome.app.data.onboarding.KnockDto
 import com.familyhome.app.domain.model.Role
 
 @Composable
@@ -58,7 +60,24 @@ private fun DiscoveringStep(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        if (state.discoveredDevices.isEmpty()) {
+        // Devices that knocked (member-initiated join requests)
+        if (state.pendingKnocks.isNotEmpty()) {
+            Text(
+                text  = "Devices requesting to join:",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            state.pendingKnocks.forEach { knock ->
+                KnockCard(
+                    knock     = knock,
+                    isLoading = state.isLoadingInvite.contains(knock.deviceId),
+                    onInvite  = { viewModel.sendInviteToKnock(knock) },
+                )
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+        }
+
+        if (state.discoveredDevices.isEmpty() && state.pendingKnocks.isEmpty()) {
             Box(
                 modifier         = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center,
@@ -73,19 +92,21 @@ private fun DiscoveringStep(
                     )
                 }
             }
-        } else {
+        } else if (state.discoveredDevices.isNotEmpty()) {
             LazyColumn(
                 modifier            = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(state.discoveredDevices, key = { it.device.serviceName }) { deviceUi ->
                     DiscoveredDeviceCard(
-                        deviceUi     = deviceUi,
-                        isLoading    = state.isLoadingInvite.contains(deviceUi.device.serviceName),
-                        onInvite     = { viewModel.sendInvite(deviceUi) },
+                        deviceUi  = deviceUi,
+                        isLoading = state.isLoadingInvite.contains(deviceUi.device.serviceName),
+                        onInvite  = { viewModel.sendInvite(deviceUi) },
                     )
                 }
             }
+        } else {
+            Spacer(Modifier.weight(1f))
         }
 
         if (state.error != null) {
@@ -150,6 +171,45 @@ private fun DiscoveredDeviceCard(
                 else -> Button(onClick = onInvite) {
                     Text("Invite")
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KnockCard(
+    knock: KnockDto,
+    isLoading: Boolean,
+    onInvite: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier              = Modifier.padding(16.dp),
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier              = Modifier.weight(1f),
+            ) {
+                Icon(
+                    Icons.Default.Notifications,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Column {
+                    Text(text = knock.deviceName, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text  = knock.memberIp,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            when {
+                isLoading -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                else -> Button(onClick = onInvite) { Text("Invite") }
             }
         }
     }

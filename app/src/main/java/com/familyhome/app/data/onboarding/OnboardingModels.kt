@@ -43,3 +43,12 @@ data class ApprovalStatusDto(
     val status: String,
     val userId: String? = null,
 )
+
+/** Member → Father's SyncServer  POST /onboarding/knock — notifies Father that a device wants to join */
+@Serializable
+data class KnockDto(
+    val deviceId: String,
+    val deviceName: String,
+    val memberIp: String,
+    val memberPort: Int,
+)

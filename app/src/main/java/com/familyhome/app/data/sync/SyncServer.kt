@@ -4,6 +4,7 @@ import com.familyhome.app.data.mapper.*
 import com.familyhome.app.data.onboarding.ApprovalStatusDto
 import com.familyhome.app.data.onboarding.FamilyInfoDto
 import com.familyhome.app.data.onboarding.JoinRequestDto
+import com.familyhome.app.data.onboarding.KnockDto
 import com.familyhome.app.data.onboarding.OnboardingState
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.SyncPayload
@@ -61,6 +62,7 @@ class SyncServer @Inject constructor(
                 post("/onboarding/join-request")         { handleJoinRequest(call) }
                 get("/onboarding/pending")               { handleGetPending(call) }
                 get("/onboarding/status/{deviceId}")     { handleStatus(call) }
+                post("/onboarding/knock")                { handleKnock(call) }
             }
         }.start(wait = false)
     }
@@ -119,6 +121,12 @@ class SyncServer @Inject constructor(
 
     private suspend fun handleGetPending(call: ApplicationCall) {
         call.respond(onboardingState.pendingRequests.value)
+    }
+
+    private suspend fun handleKnock(call: ApplicationCall) {
+        val knock = call.receive<KnockDto>()
+        onboardingState.addKnock(knock)
+        call.respond(mapOf("status" to "received"))
     }
 
     private suspend fun handleStatus(call: ApplicationCall) {

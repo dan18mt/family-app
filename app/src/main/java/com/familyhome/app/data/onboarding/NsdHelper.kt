@@ -51,6 +51,9 @@ class NsdHelper @Inject constructor(
     private val resolveQueue = ArrayDeque<NsdServiceInfo>()
     private var isResolving = false
 
+    // Track IPv6-only resolve attempts per service to allow retries before giving up
+    private val resolveAttempts = mutableMapOf<String, Int>()
+
     // ── Advertising ──────────────────────────────────────────────────────────
 
     fun startAdvertising(serviceName: String, port: Int, serviceType: String) {
@@ -144,9 +147,21 @@ class NsdHelper @Inject constructor(
                 }
                 val address = if (rawAddress.contains('%')) rawAddress.substringBefore('%') else rawAddress
                 if (address.contains(':')) {
-                    // Skip IPv6 — resolve again might give IPv4 on retry; just skip for now
-                    isResolving = false; resolveNext(); return
+                    // IPv6 address — retry up to 3 times hoping to get IPv4
+                    val attempts = resolveAttempts.getOrDefault(serviceInfo.serviceName, 0)
+                    if (attempts < 3) {
+                        resolveAttempts[serviceInfo.serviceName] = attempts + 1
+                        isResolving = false
+                        enqueueResolve(serviceInfo)
+                    } else {
+                        Log.w(TAG, "Giving up IPv4 resolution for ${serviceInfo.serviceName} after $attempts retries")
+                        resolveAttempts.remove(serviceInfo.serviceName)
+                        isResolving = false
+                        resolveNext()
+                    }
+                    return
                 }
+                resolveAttempts.remove(serviceInfo.serviceName)
                 _discoveredDevices.update { list ->
                     val device = DiscoveredDevice(
                         serviceName = serviceInfo.serviceName,

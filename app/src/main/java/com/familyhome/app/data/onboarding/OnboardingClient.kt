@@ -43,4 +43,11 @@ class OnboardingClient @Inject constructor(
     suspend fun pollApprovalStatus(ip: String, port: Int, deviceId: String): ApprovalStatusDto? = runCatching {
         httpClient.get("http://$ip:$port/onboarding/status/$deviceId").body<ApprovalStatusDto>()
     }.getOrNull()
+
+    suspend fun sendKnock(ip: String, port: Int, knock: KnockDto): Boolean = runCatching {
+        httpClient.post("http://$ip:$port/onboarding/knock") {
+            contentType(ContentType.Application.Json)
+            setBody(knock)
+        }.status.isSuccess()
+    }.getOrDefault(false)
 }
