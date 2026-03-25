@@ -70,6 +70,13 @@ fun AppNavGraph(
             )
         }
 
+        // Same screen reached from Home → just pop back when done instead of showing Tutorial
+        composable(Screen.ManageMembers.route) {
+            FatherOnboardingScreen(
+                onDone = { navController.popBackStack() }
+            )
+        }
+
         composable(Screen.MemberOnboarding.route) {
             MemberOnboardingScreen(
                 onDone = {

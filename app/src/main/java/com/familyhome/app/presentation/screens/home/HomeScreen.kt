@@ -49,6 +49,15 @@ fun HomeScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            if (state.currentUser?.role == Role.FATHER) {
+                ExtendedFloatingActionButton(
+                    onClick = { onNavigateTo(Screen.ManageMembers) },
+                    icon    = { Icon(Icons.Default.PersonAdd, contentDescription = null) },
+                    text    = { Text("Invite Member") },
+                )
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
