@@ -3,11 +3,14 @@ package com.familyhome.app.presentation.screens.home
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.familyhome.app.data.notification.NotificationCenter
 import com.familyhome.app.data.onboarding.InviteDto
+import com.familyhome.app.data.onboarding.JoinRequestDto
 import com.familyhome.app.data.onboarding.KnockDto
 import com.familyhome.app.data.onboarding.NsdHelper
 import com.familyhome.app.data.onboarding.OnboardingClient
 import com.familyhome.app.data.onboarding.OnboardingState
+import com.familyhome.app.data.sync.SyncServer
 import com.familyhome.app.domain.model.StockItem
 import com.familyhome.app.domain.model.User
 import com.familyhome.app.data.sync.SyncRepositoryImpl
@@ -33,6 +36,8 @@ data class HomeUiState(
     val pendingKnocks: List<KnockDto> = emptyList(),
     val invitingKnockIds: Set<String> = emptySet(),
     val knockError: String? = null,
+    val pendingJoinRequests: List<JoinRequestDto> = emptyList(),
+    val unreadNotificationCount: Int = 0,
 )
 
 @HiltViewModel
@@ -42,9 +47,11 @@ class HomeViewModel @Inject constructor(
     private val getLowStockItemsUseCase: GetLowStockItemsUseCase,
     private val checkBudgetAlertUseCase: CheckBudgetAlertUseCase,
     private val syncRepository: SyncRepositoryImpl,
+    private val syncServer: SyncServer,
     private val nsdHelper: NsdHelper,
     private val onboardingClient: OnboardingClient,
     private val onboardingState: OnboardingState,
+    private val notificationCenter: NotificationCenter,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -92,6 +99,29 @@ class HomeViewModel @Inject constructor(
                 _state.update { it.copy(pendingKnocks = knocks) }
             }
         }
+
+        viewModelScope.launch {
+            onboardingState.pendingRequests.collect { requests ->
+                _state.update { it.copy(pendingJoinRequests = requests) }
+            }
+        }
+
+        viewModelScope.launch {
+            notificationCenter.notifications.collect { notifications ->
+                _state.update { it.copy(unreadNotificationCount = notifications.count { n -> !n.isRead }) }
+            }
+        }
+    }
+
+    fun approveJoinRequest(request: JoinRequestDto, role: Role) {
+        val fatherId = _state.value.currentUser?.id ?: return
+        viewModelScope.launch {
+            syncServer.createMemberFromRequest(request, role, fatherId)
+        }
+    }
+
+    fun rejectJoinRequest(request: JoinRequestDto) {
+        syncServer.rejectRequest(request.deviceId)
     }
 
     fun sendInviteFromKnock(knock: KnockDto) {

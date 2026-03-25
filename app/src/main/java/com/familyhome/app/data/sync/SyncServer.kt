@@ -1,11 +1,14 @@
 package com.familyhome.app.data.sync
 
 import com.familyhome.app.data.mapper.*
+import com.familyhome.app.data.notification.NotificationCenter
 import com.familyhome.app.data.onboarding.ApprovalStatusDto
 import com.familyhome.app.data.onboarding.FamilyInfoDto
 import com.familyhome.app.data.onboarding.JoinRequestDto
 import com.familyhome.app.data.onboarding.KnockDto
 import com.familyhome.app.data.onboarding.OnboardingState
+import com.familyhome.app.domain.model.AppNotification
+import com.familyhome.app.domain.model.NotificationType
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.SyncPayload
 import com.familyhome.app.domain.model.User
@@ -40,6 +43,7 @@ class SyncServer @Inject constructor(
     private val expenseRepository: ExpenseRepository,
     private val budgetRepository: BudgetRepository,
     private val onboardingState: OnboardingState,
+    private val notificationCenter: NotificationCenter,
 ) {
     private var server: ApplicationEngine? = null
 
@@ -89,7 +93,32 @@ class SyncServer @Inject constructor(
     private suspend fun handlePush(call: ApplicationCall) {
         val payload = call.receive<SyncPayload>()
         mergePayload(payload)
+        postSyncNotifications(payload)
         call.respond(mapOf("status" to "ok"))
+    }
+
+    private fun postSyncNotifications(payload: SyncPayload) {
+        payload.choreLogs?.forEach { log ->
+            notificationCenter.post(AppNotification(
+                type    = NotificationType.CHORE_COMPLETED,
+                title   = "Chore completed",
+                message = log.taskName,
+            ))
+        }
+        payload.recurringTasks?.forEach { task ->
+            notificationCenter.post(AppNotification(
+                type    = NotificationType.CHORE_ASSIGNED,
+                title   = "Chore assigned",
+                message = task.taskName,
+            ))
+        }
+        payload.expenses?.forEach { expense ->
+            notificationCenter.post(AppNotification(
+                type    = NotificationType.EXPENSE_ADDED,
+                title   = "New expense",
+                message = "${expense.description} — ${expense.category.lowercase().replaceFirstChar { it.uppercase() }}",
+            ))
+        }
     }
 
     /** Last-write-wins merge: upsert everything received from the client. */
@@ -116,6 +145,11 @@ class SyncServer @Inject constructor(
     private suspend fun handleJoinRequest(call: ApplicationCall) {
         val request = call.receive<JoinRequestDto>()
         onboardingState.addJoinRequest(request)
+        notificationCenter.post(AppNotification(
+            type    = NotificationType.JOIN_REQUEST,
+            title   = "New join request",
+            message = "${request.name} (${request.deviceName}) wants to join your family",
+        ))
         call.respond(mapOf("status" to "pending"))
     }
 
@@ -163,6 +197,11 @@ class SyncServer @Inject constructor(
             deviceId = request.deviceId,
             status   = ApprovalStatusDto(status = "approved", userId = newUser.id),
         )
+        notificationCenter.post(AppNotification(
+            type    = NotificationType.MEMBER_JOINED,
+            title   = "Member joined",
+            message = "${newUser.name} is now part of your family as ${newUser.role.displayName}",
+        ))
         return newUser
     }
 

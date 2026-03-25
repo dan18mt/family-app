@@ -15,6 +15,7 @@ import com.familyhome.app.presentation.screens.expenses.ExpensesScreen
 import com.familyhome.app.presentation.screens.home.HomeScreen
 import com.familyhome.app.presentation.screens.login.LoginScreen
 import com.familyhome.app.presentation.screens.login.LoginViewModel
+import com.familyhome.app.presentation.screens.notifications.NotificationsScreen
 import com.familyhome.app.presentation.screens.onboarding.FatherOnboardingScreen
 import com.familyhome.app.presentation.screens.onboarding.MemberOnboardingScreen
 import com.familyhome.app.presentation.screens.setup.SetupScreen
@@ -144,6 +145,10 @@ fun AppNavGraph(
             com.familyhome.app.presentation.screens.sync.SyncSettingsScreen(
                 onBack = { navController.popBackStack() }
             )
+        }
+
+        composable(Screen.Notifications.route) {
+            NotificationsScreen(onBack = { navController.popBackStack() })
         }
     }
 }

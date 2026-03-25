@@ -12,7 +12,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,6 +24,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.familyhome.app.data.onboarding.JoinRequestDto
 import com.familyhome.app.data.onboarding.KnockDto
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.presentation.components.AvatarInitials
@@ -39,6 +42,19 @@ fun HomeScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    var roleDialogRequest by remember { mutableStateOf<JoinRequestDto?>(null) }
+
+    // Role assignment dialog for join request approvals
+    roleDialogRequest?.let { request ->
+        ApprovalRoleDialog(
+            memberName = request.name,
+            onDismiss  = { roleDialogRequest = null },
+            onAssign   = { role ->
+                viewModel.approveJoinRequest(request, role)
+                roleDialogRequest = null
+            },
+        )
+    }
 
     LaunchedEffect(state.knockError) {
         if (state.knockError != null) {
@@ -83,6 +99,22 @@ fun HomeScreen(
                             modifier = Modifier.size(36.dp),
                         )
                         Spacer(Modifier.width(4.dp))
+                    }
+                    // Notification bell with unread badge
+                    BadgedBox(
+                        badge = {
+                            if (state.unreadNotificationCount > 0) {
+                                Badge { Text(state.unreadNotificationCount.toString()) }
+                            }
+                        }
+                    ) {
+                        IconButton(onClick = { onNavigateTo(Screen.Notifications) }) {
+                            Icon(
+                                Icons.Default.Notifications,
+                                contentDescription = "Notifications",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                     IconButton(onClick = onNavigateToSync) {
                         Icon(
@@ -150,9 +182,21 @@ fun HomeScreen(
                 Spacer(Modifier.height(8.dp))
             }
 
+            // ── Pending approvals (Father only) ───────────────────────────
+            if (state.currentUser?.role == Role.FATHER && state.pendingJoinRequests.isNotEmpty()) {
+                item { SectionHeader("Pending Approvals (${state.pendingJoinRequests.size})") }
+                items(state.pendingJoinRequests, key = { it.deviceId }) { request ->
+                    PendingApprovalCard(
+                        request  = request,
+                        onApprove = { roleDialogRequest = request },
+                        onReject  = { viewModel.rejectJoinRequest(request) },
+                    )
+                }
+            }
+
             // ── Join requests (Father only) ────────────────────────────────
             if (state.currentUser?.role == Role.FATHER && state.pendingKnocks.isNotEmpty()) {
-                item { SectionHeader("Join Requests (${state.pendingKnocks.size})") }
+                item { SectionHeader("Waiting to Invite (${state.pendingKnocks.size})") }
                 items(state.pendingKnocks, key = { it.deviceId }) { knock ->
                     JoinRequestKnockCard(
                         knock     = knock,
@@ -249,6 +293,77 @@ fun HomeScreen(
             }
         }
     }
+}
+
+@Composable
+private fun PendingApprovalCard(
+    request: JoinRequestDto,
+    onApprove: () -> Unit,
+    onReject: () -> Unit,
+) {
+    ListItem(
+        headlineContent   = { Text(request.name, style = MaterialTheme.typography.bodyLarge) },
+        supportingContent = { Text("Submitted from ${request.deviceName} — waiting for your approval") },
+        leadingContent = {
+            Box(
+                modifier         = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Default.HowToReg,
+                    null,
+                    tint     = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        },
+        trailingContent = {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                IconButton(onClick = onReject) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Reject",
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
+                IconButton(onClick = onApprove) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = "Approve",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun ApprovalRoleDialog(
+    memberName: String,
+    onDismiss: () -> Unit,
+    onAssign: (Role) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Assign Role to $memberName") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("What is ${memberName}'s role in the family?")
+                Button(
+                    onClick  = { onAssign(Role.WIFE) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Partner / Spouse") }
+                OutlinedButton(
+                    onClick  = { onAssign(Role.KID) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Kid / Child") }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
