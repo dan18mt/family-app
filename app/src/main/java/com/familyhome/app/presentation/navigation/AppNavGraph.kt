@@ -13,6 +13,8 @@ import com.familyhome.app.presentation.screens.expenses.ExpensesScreen
 import com.familyhome.app.presentation.screens.home.HomeScreen
 import com.familyhome.app.presentation.screens.login.LoginScreen
 import com.familyhome.app.presentation.screens.login.LoginViewModel
+import com.familyhome.app.presentation.screens.onboarding.FatherOnboardingScreen
+import com.familyhome.app.presentation.screens.onboarding.MemberOnboardingScreen
 import com.familyhome.app.presentation.screens.setup.SetupScreen
 import com.familyhome.app.presentation.screens.stock.StockScreen
 
@@ -25,12 +27,38 @@ fun AppNavGraph(
         navController    = navController,
         startDestination = startDestination,
     ) {
-        // ── Auth ──────────────────────────────────────────────────────────────
+        // ── Auth / Onboarding ──────────────────────────────────────────────────
         composable(Screen.Setup.route) {
             SetupScreen(
                 onSetupComplete = {
-                    navController.navigate(Screen.Home.route) {
+                    // Father just created their account — go straight to device discovery
+                    navController.navigate(Screen.FatherOnboarding.route) {
                         popUpTo(Screen.Setup.route) { inclusive = true }
+                    }
+                },
+                onJoinFamily = {
+                    navController.navigate(Screen.MemberOnboarding.route) {
+                        popUpTo(Screen.Setup.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(Screen.FatherOnboarding.route) {
+            FatherOnboardingScreen(
+                onDone = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.FatherOnboarding.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Screen.MemberOnboarding.route) {
+            MemberOnboardingScreen(
+                onDone = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.MemberOnboarding.route) { inclusive = true }
                     }
                 }
             )
@@ -53,8 +81,8 @@ fun AppNavGraph(
         // ── Main screens ──────────────────────────────────────────────────────
         composable(Screen.Home.route) {
             HomeScreen(
-                onNavigateTo      = { navController.navigate(it.route) },
-                onNavigateToSync  = { navController.navigate(Screen.SyncSettings.route) },
+                onNavigateTo     = { navController.navigate(it.route) },
+                onNavigateToSync = { navController.navigate(Screen.SyncSettings.route) },
             )
         }
 

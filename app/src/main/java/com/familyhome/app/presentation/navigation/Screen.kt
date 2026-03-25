@@ -17,6 +17,10 @@ sealed class Screen(val route: String) {
     data object AddStockItem  : Screen("stock/add")
     data object AddChore      : Screen("chores/add")
     data object AddExpense    : Screen("expenses/add")
-    data object ManageMembers : Screen("settings/members")
-    data object SyncSettings  : Screen("settings/sync")
+    data object ManageMembers    : Screen("settings/members")
+    data object SyncSettings     : Screen("settings/sync")
+
+    // Onboarding
+    data object FatherOnboarding : Screen("onboarding/father")
+    data object MemberOnboarding : Screen("onboarding/member")
 }

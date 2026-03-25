@@ -11,13 +11,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+enum class SetupStep { CHOOSE, SETUP_FATHER }
+
 data class SetupUiState(
-    val name: String       = "",
-    val pin: String        = "",
-    val confirmPin: String = "",
-    val isLoading: Boolean = false,
-    val error: String?     = null,
-    val isDone: Boolean    = false,
+    val step: SetupStep        = SetupStep.CHOOSE,
+    val name: String           = "",
+    val pin: String            = "",
+    val confirmPin: String     = "",
+    val isLoading: Boolean     = false,
+    val error: String?         = null,
+    val isDone: Boolean        = false,
+    val navigateToJoin: Boolean = false,
 )
 
 @HiltViewModel
@@ -27,6 +31,10 @@ class SetupViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(SetupUiState())
     val state = _state.asStateFlow()
+
+    fun onCreateFamilyChosen()    = _state.update { it.copy(step = SetupStep.SETUP_FATHER) }
+    fun onJoinFamilyChosen()      = _state.update { it.copy(navigateToJoin = true) }
+    fun onJoinNavigated()         = _state.update { it.copy(navigateToJoin = false) }
 
     fun onNameChange(value: String)       = _state.update { it.copy(name = value, error = null) }
     fun onPinChange(value: String)        = _state.update { it.copy(pin = value, error = null) }
