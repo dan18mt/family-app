@@ -1,5 +1,7 @@
 package com.familyhome.app.presentation.navigation
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -17,6 +19,9 @@ import com.familyhome.app.presentation.screens.onboarding.FatherOnboardingScreen
 import com.familyhome.app.presentation.screens.onboarding.MemberOnboardingScreen
 import com.familyhome.app.presentation.screens.setup.SetupScreen
 import com.familyhome.app.presentation.screens.stock.StockScreen
+import com.familyhome.app.presentation.screens.tutorial.TutorialScreen
+
+private const val ANIM_DURATION = 300
 
 @Composable
 fun AppNavGraph(
@@ -26,12 +31,23 @@ fun AppNavGraph(
     NavHost(
         navController    = navController,
         startDestination = startDestination,
+        enterTransition  = {
+            slideInHorizontally(tween(ANIM_DURATION)) { it } + fadeIn(tween(ANIM_DURATION))
+        },
+        exitTransition   = {
+            slideOutHorizontally(tween(ANIM_DURATION)) { -it / 3 } + fadeOut(tween(ANIM_DURATION))
+        },
+        popEnterTransition  = {
+            slideInHorizontally(tween(ANIM_DURATION)) { -it / 3 } + fadeIn(tween(ANIM_DURATION))
+        },
+        popExitTransition   = {
+            slideOutHorizontally(tween(ANIM_DURATION)) { it } + fadeOut(tween(ANIM_DURATION))
+        },
     ) {
         // ── Auth / Onboarding ──────────────────────────────────────────────────
         composable(Screen.Setup.route) {
             SetupScreen(
                 onSetupComplete = {
-                    // Father just created their account — go straight to device discovery
                     navController.navigate(Screen.FatherOnboarding.route) {
                         popUpTo(Screen.Setup.route) { inclusive = true }
                     }
@@ -47,7 +63,7 @@ fun AppNavGraph(
         composable(Screen.FatherOnboarding.route) {
             FatherOnboardingScreen(
                 onDone = {
-                    navController.navigate(Screen.Home.route) {
+                    navController.navigate(Screen.Tutorial.route) {
                         popUpTo(Screen.FatherOnboarding.route) { inclusive = true }
                     }
                 }
@@ -57,8 +73,22 @@ fun AppNavGraph(
         composable(Screen.MemberOnboarding.route) {
             MemberOnboardingScreen(
                 onDone = {
-                    navController.navigate(Screen.Home.route) {
+                    navController.navigate(Screen.Tutorial.route) {
                         popUpTo(Screen.MemberOnboarding.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(
+            route           = Screen.Tutorial.route,
+            enterTransition = { fadeIn(tween(400)) },
+            exitTransition  = { fadeOut(tween(300)) },
+        ) {
+            TutorialScreen(
+                onDone = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Tutorial.route) { inclusive = true }
                     }
                 }
             )
@@ -87,21 +117,15 @@ fun AppNavGraph(
         }
 
         composable(Screen.Stock.route) {
-            StockScreen(
-                onAddItem = { navController.navigate(Screen.AddStockItem.route) }
-            )
+            StockScreen(onAddItem = { navController.navigate(Screen.AddStockItem.route) })
         }
 
         composable(Screen.Chores.route) {
-            ChoresScreen(
-                onAddChore = { navController.navigate(Screen.AddChore.route) }
-            )
+            ChoresScreen(onAddChore = { navController.navigate(Screen.AddChore.route) })
         }
 
         composable(Screen.Expenses.route) {
-            ExpensesScreen(
-                onAddExpense = { navController.navigate(Screen.AddExpense.route) }
-            )
+            ExpensesScreen(onAddExpense = { navController.navigate(Screen.AddExpense.route) })
         }
 
         composable(Screen.Chat.route) {

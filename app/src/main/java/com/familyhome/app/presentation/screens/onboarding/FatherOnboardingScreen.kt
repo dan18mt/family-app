@@ -49,11 +49,11 @@ private fun DiscoveringStep(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
-            text  = "Find Family Members",
+            text  = "Find Family Members to Invite",
             style = MaterialTheme.typography.headlineSmall,
         )
         Text(
-            text  = "Devices on the same WiFi running FamilyHome in join mode will appear below. Tap Invite to send them an invitation.",
+            text  = "Devices on the same WiFi running FamilyHome in \"Join a Family\" mode will appear here. Tap Invite to send an invitation.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -147,8 +147,8 @@ private fun DiscoveredDeviceCard(
                     tint = MaterialTheme.colorScheme.primary,
                 )
                 isLoading -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                else -> IconButton(onClick = onInvite) {
-                    Icon(Icons.Default.Send, contentDescription = "Send invite")
+                else -> Button(onClick = onInvite) {
+                    Text("Invite")
                 }
             }
         }
@@ -184,7 +184,7 @@ private fun ApprovingStep(
             style = MaterialTheme.typography.headlineSmall,
         )
         Text(
-            text  = "Family members who accepted your invitation will appear here. Approve them and assign a role.",
+            text  = "Members who accepted your invite appear here. Approve their profile and assign a role.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -272,11 +272,11 @@ private fun RoleAssignmentDialog(
         title = { Text("Assign Role to $memberName") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Who is $memberName in the family?")
+                Text("What is ${memberName}'s role in the family?")
                 Button(
                     onClick  = { onAssign(Role.WIFE) },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("Wife / Partner") }
+                ) { Text("Partner / Spouse") }
                 OutlinedButton(
                     onClick  = { onAssign(Role.KID) },
                     modifier = Modifier.fillMaxWidth(),

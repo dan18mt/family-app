@@ -23,4 +23,5 @@ sealed class Screen(val route: String) {
     // Onboarding
     data object FatherOnboarding : Screen("onboarding/father")
     data object MemberOnboarding : Screen("onboarding/member")
+    data object Tutorial         : Screen("onboarding/tutorial")
 }

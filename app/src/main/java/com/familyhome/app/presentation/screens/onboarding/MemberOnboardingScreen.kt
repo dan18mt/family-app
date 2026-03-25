@@ -58,7 +58,7 @@ private fun ScanningStep(state: MemberOnboardingUiState) {
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text      = "Make sure your phone is on the same WiFi as Father's device.\n\nAsk Father to open FamilyHome and send you an invite.",
+            text      = "Make sure your phone is on the same WiFi as the Family Leader's device.\n\nAsk the Family Leader to open FamilyHome and send you an invite.",
             style     = MaterialTheme.typography.bodyMedium,
             color     = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -99,7 +99,7 @@ private fun InviteReceivedStep(
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            text      = "$fatherName has invited you to join their family on FamilyHome.",
+            text      = "$fatherName has invited you to join the family on FamilyHome.",
             style     = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             color     = MaterialTheme.colorScheme.onSurfaceVariant,

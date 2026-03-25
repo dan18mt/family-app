@@ -18,5 +18,9 @@ enum class Role {
     KID;
 
     val displayName: String
-        get() = name.lowercase().replaceFirstChar { it.uppercase() }
+        get() = when (this) {
+            FATHER -> "Leader"
+            WIFE   -> "Partner"
+            KID    -> "Kid"
+        }
 }

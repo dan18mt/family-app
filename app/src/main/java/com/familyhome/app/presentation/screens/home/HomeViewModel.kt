@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.familyhome.app.domain.model.StockItem
 import com.familyhome.app.domain.model.User
+import com.familyhome.app.data.sync.SyncRepositoryImpl
+import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.usecase.expense.CheckBudgetAlertUseCase
 import com.familyhome.app.domain.usecase.stock.GetLowStockItemsUseCase
 import com.familyhome.app.domain.usecase.user.GetCurrentUserUseCase
@@ -27,6 +29,7 @@ class HomeViewModel @Inject constructor(
     private val getFamilyMembersUseCase: GetFamilyMembersUseCase,
     private val getLowStockItemsUseCase: GetLowStockItemsUseCase,
     private val checkBudgetAlertUseCase: CheckBudgetAlertUseCase,
+    private val syncRepository: SyncRepositoryImpl,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -42,7 +45,10 @@ class HomeViewModel @Inject constructor(
             _state.update { it.copy(currentUser = currentUser) }
 
             if (currentUser != null) {
-                // Budget alerts (one-shot)
+                // Father's sync server starts automatically — no manual toggle needed
+                if (currentUser.role == Role.FATHER) {
+                    syncRepository.startHostServer()
+                }
                 val alerts = checkBudgetAlertUseCase(currentUser.id)
                 _state.update { it.copy(budgetAlerts = alerts) }
             }

@@ -1,7 +1,6 @@
 package com.familyhome.app.presentation.theme
 
 import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -19,11 +18,21 @@ private val lightColorScheme = lightColorScheme(
     secondaryContainer   = SecondaryContainerLight,
     onSecondaryContainer = OnSecondaryContainerLight,
     tertiary             = TertiaryLight,
+    onTertiary           = OnTertiaryLight,
+    tertiaryContainer    = TertiaryContainerLight,
+    onTertiaryContainer  = OnTertiaryContainerLight,
     error                = ErrorLight,
+    onError              = OnErrorLight,
+    errorContainer       = ErrorContainerLight,
+    onErrorContainer     = OnErrorContainerLight,
     background           = BackgroundLight,
-    surface              = SurfaceLight,
     onBackground         = OnBackgroundLight,
+    surface              = SurfaceLight,
     onSurface            = OnSurfaceLight,
+    surfaceVariant       = SurfaceVariantLight,
+    onSurfaceVariant     = OnSurfaceVariantLight,
+    outline              = OutlineLight,
+    outlineVariant       = OutlineVariantLight,
 )
 
 private val darkColorScheme = darkColorScheme(
@@ -33,12 +42,20 @@ private val darkColorScheme = darkColorScheme(
     onPrimaryContainer   = OnPrimaryContainerDark,
     secondary            = SecondaryDark,
     onSecondary          = OnSecondaryDark,
+    secondaryContainer   = SecondaryContainerDark,
+    onSecondaryContainer = OnSecondaryContainerDark,
     tertiary             = TertiaryDark,
+    onTertiary           = OnTertiaryDark,
     error                = ErrorDark,
+    onError              = OnErrorDark,
     background           = BackgroundDark,
-    surface              = SurfaceDark,
     onBackground         = OnBackgroundDark,
+    surface              = SurfaceDark,
     onSurface            = OnSurfaceDark,
+    surfaceVariant       = SurfaceVariantDark,
+    onSurfaceVariant     = OnSurfaceVariantDark,
+    outline              = OutlineDark,
+    outlineVariant       = OutlineVariantDark,
 )
 
 @Composable
@@ -52,8 +69,6 @@ fun FamilyHomeTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            // statusBarColor is deprecated on API 35+; enableEdgeToEdge() in MainActivity
-            // handles the scrim. We only control light/dark icon appearance here.
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }

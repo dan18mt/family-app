@@ -35,6 +35,7 @@ class SetupViewModel @Inject constructor(
     fun onCreateFamilyChosen()    = _state.update { it.copy(step = SetupStep.SETUP_FATHER) }
     fun onJoinFamilyChosen()      = _state.update { it.copy(navigateToJoin = true) }
     fun onJoinNavigated()         = _state.update { it.copy(navigateToJoin = false) }
+    fun onBackToChoose()          = _state.update { it.copy(step = SetupStep.CHOOSE, error = null) }
 
     fun onNameChange(value: String)       = _state.update { it.copy(name = value, error = null) }
     fun onPinChange(value: String)        = _state.update { it.copy(pin = value, error = null) }
