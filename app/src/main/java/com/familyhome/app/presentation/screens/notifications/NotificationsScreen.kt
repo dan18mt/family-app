@@ -158,4 +158,6 @@ private fun notificationStyle(type: NotificationType): Pair<ImageVector, Color> 
     NotificationType.CHORE_ASSIGNED  -> Icons.Default.CheckCircle      to MaterialTheme.colorScheme.secondary
     NotificationType.EXPENSE_ADDED   -> Icons.Default.MonetizationOn   to MaterialTheme.colorScheme.error
     NotificationType.GENERAL         -> Icons.Default.Info             to MaterialTheme.colorScheme.onSurfaceVariant
+    NotificationType.CHORE_REMINDER  -> Icons.Default.NotificationImportant to MaterialTheme.colorScheme.surfaceBright
+    NotificationType.CHORE_OVERDUE   -> Icons.Default.CrisisAlert to MaterialTheme.colorScheme.errorContainer
 }
