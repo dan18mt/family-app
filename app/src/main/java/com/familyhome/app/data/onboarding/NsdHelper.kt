@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 import javax.inject.Singleton
 
+
 data class DiscoveredDevice(
     val serviceName: String,
     val hostAddress: String,
@@ -31,6 +32,7 @@ data class DiscoveredDevice(
 @Singleton
 class NsdHelper @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val networkMonitor: NetworkMonitor,
 ) {
     companion object {
         private const val TAG = "NsdHelper"
@@ -47,6 +49,12 @@ class NsdHelper @Inject constructor(
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var discoveryListener: NsdManager.DiscoveryListener? = null
 
+    /** Service type currently being browsed — used to restart on reconnect. */
+    private var activeBrowseServiceType: String? = null
+
+    /** Service name + type being advertised — used to restart on reconnect. */
+    private var activeAdvertiseInfo: Triple<String, Int, String>? = null // name, port, type
+
     // Android NSD allows only one concurrent resolve — queue extras
     private val resolveQueue = ArrayDeque<NsdServiceInfo>()
     private var isResolving = false
@@ -54,9 +62,24 @@ class NsdHelper @Inject constructor(
     // Track IPv6-only resolve attempts per service to allow retries before giving up
     private val resolveAttempts = mutableMapOf<String, Int>()
 
+    init {
+        // Re-advertise / re-browse when Wi-Fi reconnects (e.g., IP change)
+        networkMonitor.addReconnectCallback {
+            activeAdvertiseInfo?.let { (name, port, type) ->
+                Log.d(TAG, "Network reconnected — re-advertising NSD service")
+                startAdvertising(name, port, type)
+            }
+            activeBrowseServiceType?.let { type ->
+                Log.d(TAG, "Network reconnected — restarting NSD browse for $type")
+                startBrowsing(type)
+            }
+        }
+    }
+
     // ── Advertising ──────────────────────────────────────────────────────────
 
     fun startAdvertising(serviceName: String, port: Int, serviceType: String) {
+        activeAdvertiseInfo = Triple(serviceName, port, serviceType)
         stopAdvertising()
         val info = NsdServiceInfo().apply {
             this.serviceName = serviceName
@@ -78,11 +101,13 @@ class NsdHelper @Inject constructor(
             runCatching { nsdManager.unregisterService(it) }
             registrationListener = null
         }
+        activeAdvertiseInfo = null
     }
 
     // ── Discovery ────────────────────────────────────────────────────────────
 
     fun startBrowsing(serviceType: String) {
+        activeBrowseServiceType = serviceType
         stopBrowsing()
         _discoveredDevices.value = emptyList()
         val listener = object : NsdManager.DiscoveryListener {
@@ -112,6 +137,7 @@ class NsdHelper @Inject constructor(
             runCatching { nsdManager.stopServiceDiscovery(it) }
             discoveryListener = null
         }
+        activeBrowseServiceType = null
     }
 
     fun stopAll() {
@@ -168,7 +194,16 @@ class NsdHelper @Inject constructor(
                         hostAddress = address,
                         port        = serviceInfo.port,
                     )
-                    if (list.any { it.serviceName == device.serviceName }) list else list + device
+                    // Update IP if the service was already known (handles host IP changes)
+                    val existing = list.find { it.serviceName == device.serviceName }
+                    if (existing != null) {
+                        if (existing.hostAddress != address) {
+                            Log.d(TAG, "IP updated for '${device.serviceName}': ${existing.hostAddress} → $address")
+                        }
+                        list.map { if (it.serviceName == device.serviceName) device else it }
+                    } else {
+                        list + device
+                    }
                 }
                 isResolving = false
                 resolveNext()

@@ -1,8 +1,10 @@
 package com.familyhome.app.data.repository
 
+import com.familyhome.app.data.local.dao.ChoreAssignmentDao
 import com.familyhome.app.data.local.dao.ChoreLogDao
 import com.familyhome.app.data.local.dao.RecurringTaskDao
 import com.familyhome.app.data.mapper.*
+import com.familyhome.app.domain.model.ChoreAssignment
 import com.familyhome.app.domain.model.ChoreLog
 import com.familyhome.app.domain.model.RecurringTask
 import com.familyhome.app.domain.repository.ChoreRepository
@@ -13,6 +15,7 @@ import javax.inject.Inject
 class ChoreRepositoryImpl @Inject constructor(
     private val choreLogDao: ChoreLogDao,
     private val recurringTaskDao: RecurringTaskDao,
+    private val choreAssignmentDao: ChoreAssignmentDao,
 ) : ChoreRepository {
 
     override fun getChoreHistory(sinceTimestamp: Long): Flow<List<ChoreLog>> =
@@ -41,4 +44,24 @@ class ChoreRepositoryImpl @Inject constructor(
 
     override suspend fun upsertAllRecurring(tasks: List<RecurringTask>) =
         recurringTaskDao.upsertAll(tasks.map { it.toEntity() })
+
+    // ── Assignments ────────────────────────────────────────────────────────
+
+    override fun getAllAssignments(): Flow<List<ChoreAssignment>> =
+        choreAssignmentDao.getAllAssignments().map { list -> list.map { it.toDomain() } }
+
+    override fun getAssignmentsForUser(userId: String): Flow<List<ChoreAssignment>> =
+        choreAssignmentDao.getAssignmentsForUser(userId).map { list -> list.map { it.toDomain() } }
+
+    override fun getPendingAssignmentsForUser(userId: String): Flow<List<ChoreAssignment>> =
+        choreAssignmentDao.getPendingAssignmentsForUser(userId).map { list -> list.map { it.toDomain() } }
+
+    override suspend fun insertAssignment(assignment: ChoreAssignment) =
+        choreAssignmentDao.insertAssignment(assignment.toEntity())
+
+    override suspend fun updateAssignment(assignment: ChoreAssignment) =
+        choreAssignmentDao.updateAssignment(assignment.toEntity())
+
+    override suspend fun upsertAllAssignments(assignments: List<ChoreAssignment>) =
+        choreAssignmentDao.upsertAll(assignments.map { it.toEntity() })
 }

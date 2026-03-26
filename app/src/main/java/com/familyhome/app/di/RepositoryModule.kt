@@ -30,4 +30,9 @@ abstract class RepositoryModule {
 
     @Binds @Singleton
     abstract fun bindSessionRepository(impl: SessionRepositoryImpl): SessionRepository
+
+    @Binds @Singleton
+    abstract fun bindCustomExpenseCategoryRepository(
+        impl: CustomExpenseCategoryRepositoryImpl,
+    ): CustomExpenseCategoryRepository
 }

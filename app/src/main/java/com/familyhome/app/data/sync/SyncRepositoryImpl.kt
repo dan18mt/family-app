@@ -78,20 +78,22 @@ class SyncRepositoryImpl @Inject constructor(
     // ── Internal helpers ─────────────────────────────────────────────────────
 
     private suspend fun buildLocalPayload() = SyncPayload(
-        users          = userRepository.getAllUsers().first().map { it.toDto() },
-        stockItems     = stockRepository.getAllItems().first().map { it.toDto() },
-        choreLogs      = choreRepository.getChoreHistory(0L).first().map { it.toDto() },
-        recurringTasks = choreRepository.getRecurringTasks().first().map { it.toDto() },
-        expenses       = expenseRepository.getAllExpenses().first().map { it.toDto() },
-        budgets        = budgetRepository.getAllBudgets().first().map { it.toDto() },
+        users             = userRepository.getAllUsers().first().map { it.toDto() },
+        stockItems        = stockRepository.getAllItems().first().map { it.toDto() },
+        choreLogs         = choreRepository.getChoreHistory(0L).first().map { it.toDto() },
+        recurringTasks    = choreRepository.getRecurringTasks().first().map { it.toDto() },
+        choreAssignments  = choreRepository.getAllAssignments().first().map { it.toAssignmentDto() },
+        expenses          = expenseRepository.getAllExpenses().first().map { it.toDto() },
+        budgets           = budgetRepository.getAllBudgets().first().map { it.toDto() },
     )
 
     private suspend fun mergeRemotePayload(payload: SyncPayload) {
-        payload.users?.let          { userRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
-        payload.stockItems?.let     { stockRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
-        payload.choreLogs?.let      { choreRepository.upsertAllLogs(it.map { dto -> dto.toDomain() }) }
-        payload.recurringTasks?.let { choreRepository.upsertAllRecurring(it.map { dto -> dto.toDomain() }) }
-        payload.expenses?.let       { expenseRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
-        payload.budgets?.let        { budgetRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.users?.let             { userRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.stockItems?.let        { stockRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.choreLogs?.let         { choreRepository.upsertAllLogs(it.map { dto -> dto.toDomain() }) }
+        payload.recurringTasks?.let    { choreRepository.upsertAllRecurring(it.map { dto -> dto.toDomain() }) }
+        payload.choreAssignments?.let  { choreRepository.upsertAllAssignments(it.map { dto -> dto.toAssignmentDomain() }) }
+        payload.expenses?.let          { expenseRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.budgets?.let           { budgetRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
     }
 }

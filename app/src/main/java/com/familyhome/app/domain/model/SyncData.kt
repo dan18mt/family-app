@@ -12,6 +12,7 @@ data class SyncPayload(
     val stockItems: List<StockItemDto>? = null,
     val choreLogs: List<ChoreLogDto>? = null,
     val recurringTasks: List<RecurringTaskDto>? = null,
+    val choreAssignments: List<ChoreAssignmentDto>? = null,
     val expenses: List<ExpenseDto>? = null,
     val budgets: List<BudgetDto>? = null,
     val snapshotAt: Long = System.currentTimeMillis(),
@@ -37,6 +38,8 @@ data class SyncPayload(
 @Serializable data class RecurringTaskDto(
     val id: String, val taskName: String, val frequency: String,
     val assignedTo: String?, val lastDoneAt: Long?, val nextDueAt: Long,
+    val scheduledAt: Long? = null,
+    val reminderMinutesBefore: Int? = null,
 )
 
 @Serializable data class ExpenseDto(
@@ -44,6 +47,13 @@ data class SyncPayload(
     val category: String, val description: String, val paidBy: String,
     val receiptUri: String?, val loggedAt: Long, val expenseDate: Long,
     val aiExtracted: Boolean,
+    val customCategoryId: String? = null,
+)
+
+@Serializable data class ChoreAssignmentDto(
+    val id: String, val taskId: String, val taskName: String,
+    val assignedTo: String, val assignedBy: String, val status: String,
+    val declineReason: String?, val assignedAt: Long, val respondedAt: Long?,
 )
 
 @Serializable data class BudgetDto(

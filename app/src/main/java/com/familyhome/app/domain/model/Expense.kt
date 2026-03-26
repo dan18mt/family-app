@@ -14,6 +14,8 @@ data class Expense(
     val expenseDate: Long,
     /** True when the AI agent auto-extracted and logged this expense */
     val aiExtracted: Boolean,
+    /** Non-null when the user selected a custom (user-defined) category instead of a built-in one. */
+    val customCategoryId: String? = null,
 )
 
 enum class ExpenseCategory {

@@ -27,18 +27,20 @@ class LogExpenseUseCase @Inject constructor(
         receiptUri: String?,
         expenseDate: Long = System.currentTimeMillis(),
         aiExtracted: Boolean = false,
+        customCategoryId: String? = null,
     ): Result<Expense> {
         val expense = Expense(
-            id          = UUID.randomUUID().toString(),
-            amount      = amount,
-            currency    = currency,
-            category    = category,
-            description = description,
-            paidBy      = paidByUserId,
-            receiptUri  = receiptUri,
-            loggedAt    = System.currentTimeMillis(),
-            expenseDate = expenseDate,
-            aiExtracted = aiExtracted,
+            id               = UUID.randomUUID().toString(),
+            amount           = amount,
+            currency         = currency,
+            category         = category,
+            description      = description,
+            paidBy           = paidByUserId,
+            receiptUri       = receiptUri,
+            loggedAt         = System.currentTimeMillis(),
+            expenseDate      = expenseDate,
+            aiExtracted      = aiExtracted,
+            customCategoryId = customCategoryId,
         )
         expenseRepository.insertExpense(expense)
         return Result.success(expense)

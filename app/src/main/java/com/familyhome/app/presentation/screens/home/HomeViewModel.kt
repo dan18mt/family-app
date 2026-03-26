@@ -7,6 +7,7 @@ import com.familyhome.app.data.notification.NotificationCenter
 import com.familyhome.app.data.onboarding.InviteDto
 import com.familyhome.app.data.onboarding.JoinRequestDto
 import com.familyhome.app.data.onboarding.KnockDto
+import com.familyhome.app.data.onboarding.NetworkMonitor
 import com.familyhome.app.data.onboarding.NsdHelper
 import com.familyhome.app.data.onboarding.OnboardingClient
 import com.familyhome.app.data.onboarding.OnboardingState
@@ -52,6 +53,7 @@ class HomeViewModel @Inject constructor(
     private val onboardingClient: OnboardingClient,
     private val onboardingState: OnboardingState,
     private val notificationCenter: NotificationCenter,
+    private val networkMonitor: NetworkMonitor,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -158,15 +160,17 @@ class HomeViewModel @Inject constructor(
         nsdHelper.stopAdvertising()
     }
 
-    private fun getLocalIpv4Address(): String {
-        return try {
-            Collections.list(NetworkInterface.getNetworkInterfaces())
-                .flatMap { Collections.list(it.inetAddresses) }
-                .firstOrNull { !it.isLoopbackAddress && it is Inet4Address }
-                ?.hostAddress ?: ""
-        } catch (e: Exception) {
-            Log.e("HomeViewModel", "Failed to get local IP", e)
-            ""
+    private fun getLocalIpv4Address(): String =
+        networkMonitor.getCurrentIpv4() ?: run {
+            // Fallback to iterating network interfaces
+            try {
+                Collections.list(NetworkInterface.getNetworkInterfaces())
+                    .flatMap { Collections.list(it.inetAddresses) }
+                    .firstOrNull { !it.isLoopbackAddress && it is Inet4Address }
+                    ?.hostAddress ?: ""
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Failed to get local IP", e)
+                ""
+            }
         }
-    }
 }

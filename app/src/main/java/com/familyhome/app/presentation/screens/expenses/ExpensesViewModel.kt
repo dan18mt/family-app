@@ -2,12 +2,11 @@ package com.familyhome.app.presentation.screens.expenses
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.familyhome.app.domain.model.CustomExpenseCategory
 import com.familyhome.app.domain.model.Expense
 import com.familyhome.app.domain.model.ExpenseCategory
 import com.familyhome.app.domain.model.User
-import com.familyhome.app.domain.usecase.expense.CheckBudgetAlertUseCase
-import com.familyhome.app.domain.usecase.expense.GetExpensesUseCase
-import com.familyhome.app.domain.usecase.expense.LogExpenseUseCase
+import com.familyhome.app.domain.usecase.expense.*
 import com.familyhome.app.domain.usecase.user.GetCurrentUserUseCase
 import com.familyhome.app.domain.usecase.user.GetFamilyMembersUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,13 +15,14 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ExpensesUiState(
-    val expenses: List<Expense>     = emptyList(),
-    val currentUser: User?          = null,
-    val allUsers: List<User>        = emptyList(),
+    val expenses: List<Expense>                                 = emptyList(),
+    val currentUser: User?                                      = null,
+    val allUsers: List<User>                                    = emptyList(),
+    val customCategories: List<CustomExpenseCategory>           = emptyList(),
     val budgetAlerts: List<CheckBudgetAlertUseCase.BudgetAlert> = emptyList(),
-    val totalThisMonth: Long        = 0L,
-    val isLoading: Boolean          = true,
-    val error: String?              = null,
+    val totalThisMonth: Long                                    = 0L,
+    val isLoading: Boolean                                      = true,
+    val error: String?                                          = null,
 )
 
 @HiltViewModel
@@ -32,6 +32,10 @@ class ExpensesViewModel @Inject constructor(
     private val getExpensesUseCase: GetExpensesUseCase,
     private val logExpenseUseCase: LogExpenseUseCase,
     private val checkBudgetAlertUseCase: CheckBudgetAlertUseCase,
+    private val getCustomCategoriesUseCase: GetCustomExpenseCategoriesUseCase,
+    private val addCategoryUseCase: AddCustomExpenseCategoryUseCase,
+    private val updateCategoryUseCase: UpdateCustomExpenseCategoryUseCase,
+    private val deleteCategoryUseCase: DeleteCustomExpenseCategoryUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ExpensesUiState())
@@ -41,7 +45,6 @@ class ExpensesViewModel @Inject constructor(
         viewModelScope.launch {
             val user = getCurrentUserUseCase()
             _state.update { it.copy(currentUser = user) }
-
             if (user != null) {
                 val alerts = checkBudgetAlertUseCase(user.id)
                 _state.update { it.copy(budgetAlerts = alerts) }
@@ -55,7 +58,12 @@ class ExpensesViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            // Wait until currentUser is loaded before collecting expenses
+            getCustomCategoriesUseCase().collect { cats ->
+                _state.update { it.copy(customCategories = cats) }
+            }
+        }
+
+        viewModelScope.launch {
             state.filter { it.currentUser != null }.first().let { s ->
                 getExpensesUseCase(s.currentUser!!, s.allUsers).collect { expenses ->
                     val visible = expenses.filter { expense ->
@@ -71,20 +79,54 @@ class ExpensesViewModel @Inject constructor(
     fun logExpense(
         amount: Long,
         category: ExpenseCategory,
+        customCategoryId: String?,
         description: String,
         receiptUri: String?,
     ) {
         val user = _state.value.currentUser ?: return
         viewModelScope.launch {
             val result = logExpenseUseCase(
-                actor       = user,
-                amount      = amount,
-                category    = category,
-                description = description,
-                paidByUserId = user.id,
-                receiptUri  = receiptUri,
+                actor            = user,
+                amount           = amount,
+                category         = category,
+                description      = description,
+                paidByUserId     = user.id,
+                receiptUri       = receiptUri,
+                customCategoryId = customCategoryId,
             )
             result.onFailure { e -> _state.update { it.copy(error = e.message) } }
+        }
+    }
+
+    fun addCategory(name: String, iconName: String) {
+        val user = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            addCategoryUseCase(user, name, iconName)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+        }
+    }
+
+    fun renameCategory(category: CustomExpenseCategory, newName: String) {
+        val user = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            updateCategoryUseCase(user, category.copy(name = newName))
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+        }
+    }
+
+    fun changeCategoryIcon(category: CustomExpenseCategory, newIcon: String) {
+        val user = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            updateCategoryUseCase(user, category.copy(iconName = newIcon))
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+        }
+    }
+
+    fun deleteCategory(category: CustomExpenseCategory) {
+        val user = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            deleteCategoryUseCase(user, category.id)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
         }
     }
 

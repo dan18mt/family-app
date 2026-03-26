@@ -19,6 +19,7 @@ import com.familyhome.app.presentation.screens.notifications.NotificationsScreen
 import com.familyhome.app.presentation.screens.onboarding.FatherOnboardingScreen
 import com.familyhome.app.presentation.screens.onboarding.MemberOnboardingScreen
 import com.familyhome.app.presentation.screens.setup.SetupScreen
+import com.familyhome.app.presentation.screens.stock.AddStockItemScreen
 import com.familyhome.app.presentation.screens.stock.StockScreen
 import com.familyhome.app.presentation.screens.tutorial.TutorialScreen
 
@@ -126,6 +127,10 @@ fun AppNavGraph(
 
         composable(Screen.Stock.route) {
             StockScreen(onAddItem = { navController.navigate(Screen.AddStockItem.route) })
+        }
+
+        composable(Screen.AddStockItem.route) {
+            AddStockItemScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Screen.Chores.route) {

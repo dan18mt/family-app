@@ -11,10 +11,12 @@ import com.familyhome.app.data.local.entity.*
         StockItemEntity::class,
         ChoreLogEntity::class,
         RecurringTaskEntity::class,
+        ChoreAssignmentEntity::class,
         ExpenseEntity::class,
         BudgetEntity::class,
+        CustomExpenseCategoryEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class FamilyDatabase : RoomDatabase() {
@@ -22,8 +24,10 @@ abstract class FamilyDatabase : RoomDatabase() {
     abstract fun stockItemDao(): StockItemDao
     abstract fun choreLogDao(): ChoreLogDao
     abstract fun recurringTaskDao(): RecurringTaskDao
+    abstract fun choreAssignmentDao(): ChoreAssignmentDao
     abstract fun expenseDao(): ExpenseDao
     abstract fun budgetDao(): BudgetDao
+    abstract fun customExpenseCategoryDao(): CustomExpenseCategoryDao
 
     companion object {
         const val DATABASE_NAME = "family_home.db"

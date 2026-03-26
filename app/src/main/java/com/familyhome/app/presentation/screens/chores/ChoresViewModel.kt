@@ -2,32 +2,45 @@ package com.familyhome.app.presentation.screens.chores
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.familyhome.app.data.notification.AlarmScheduler
+import com.familyhome.app.domain.model.ChoreAssignment
 import com.familyhome.app.domain.model.ChoreLog
+import com.familyhome.app.domain.model.Frequency
 import com.familyhome.app.domain.model.RecurringTask
 import com.familyhome.app.domain.model.User
 import com.familyhome.app.domain.usecase.chore.*
 import com.familyhome.app.domain.usecase.user.GetCurrentUserUseCase
+import com.familyhome.app.domain.usecase.user.GetFamilyMembersUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ChoresUiState(
-    val history: List<ChoreLog>       = emptyList(),
-    val recurringTasks: List<RecurringTask> = emptyList(),
-    val currentUser: User?            = null,
-    val historyDays: Int              = 7,
-    val isLoading: Boolean            = true,
-    val error: String?                = null,
+    val history: List<ChoreLog>                = emptyList(),
+    val recurringTasks: List<RecurringTask>    = emptyList(),
+    val pendingAssignments: List<ChoreAssignment> = emptyList(),
+    val allAssignments: List<ChoreAssignment>  = emptyList(),
+    val currentUser: User?                     = null,
+    val allUsers: List<User>                   = emptyList(),
+    val historyDays: Int                       = 7,
+    val isLoading: Boolean                     = true,
+    val error: String?                         = null,
 )
 
 @HiltViewModel
 class ChoresViewModel @Inject constructor(
     private val getCurrentUserUseCase: GetCurrentUserUseCase,
+    private val getFamilyMembersUseCase: GetFamilyMembersUseCase,
     private val logChoreUseCase: LogChoreUseCase,
     private val getChoreHistoryUseCase: GetChoreHistoryUseCase,
     private val getRecurringTasksUseCase: GetRecurringTasksUseCase,
     private val completeRecurringTaskUseCase: CompleteRecurringTaskUseCase,
+    private val addRecurringTaskUseCase: AddRecurringTaskUseCase,
+    private val assignChoreUseCase: AssignChoreUseCase,
+    private val respondToAssignmentUseCase: RespondToChoreAssignmentUseCase,
+    private val getChoreAssignmentsUseCase: GetChoreAssignmentsUseCase,
+    private val alarmScheduler: AlarmScheduler,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChoresUiState())
@@ -37,11 +50,30 @@ class ChoresViewModel @Inject constructor(
         viewModelScope.launch {
             val user = getCurrentUserUseCase()
             _state.update { it.copy(currentUser = user) }
-            if (user != null) loadHistory(user, 7)
+            if (user != null) {
+                loadHistory(user, 7)
+                // Collect pending assignments for this user
+                getChoreAssignmentsUseCase.pendingForUser(user.id).collect { pending ->
+                    _state.update { it.copy(pendingAssignments = pending) }
+                }
+            }
         }
+
+        viewModelScope.launch {
+            getFamilyMembersUseCase().collect { members ->
+                _state.update { it.copy(allUsers = members) }
+            }
+        }
+
         viewModelScope.launch {
             getRecurringTasksUseCase().collect { tasks ->
                 _state.update { it.copy(recurringTasks = tasks, isLoading = false) }
+            }
+        }
+
+        viewModelScope.launch {
+            getChoreAssignmentsUseCase.all().collect { all ->
+                _state.update { it.copy(allAssignments = all) }
             }
         }
     }
@@ -57,8 +89,8 @@ class ChoresViewModel @Inject constructor(
     fun logChore(taskName: String, note: String?) {
         val user = _state.value.currentUser ?: return
         viewModelScope.launch {
-            val result = logChoreUseCase(user, taskName, user.id, note)
-            result.onFailure { e -> _state.update { it.copy(error = e.message) } }
+            logChoreUseCase(user, taskName, user.id, note)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
         }
     }
 
@@ -66,6 +98,61 @@ class ChoresViewModel @Inject constructor(
         val user = _state.value.currentUser ?: return
         viewModelScope.launch {
             completeRecurringTaskUseCase(user, task)
+            // Cancel any pending alarms for this task
+            alarmScheduler.cancel(task.id)
+        }
+    }
+
+    fun addScheduledTask(
+        taskName: String,
+        frequency: Frequency,
+        assignTo: String?,
+        scheduledAt: Long?,
+        reminderMinutesBefore: Int?,
+    ) {
+        val user = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            val result = addRecurringTaskUseCase(
+                actor                 = user,
+                taskName              = taskName,
+                frequency             = frequency,
+                assignedTo            = assignTo,
+                scheduledAt           = scheduledAt,
+                reminderMinutesBefore = reminderMinutesBefore,
+            )
+            result.fold(
+                onSuccess = { task ->
+                    // Schedule alarms if a specific time was set
+                    if (task.scheduledAt != null && task.reminderMinutesBefore != null) {
+                        alarmScheduler.schedule(task)
+                    }
+                },
+                onFailure = { e -> _state.update { it.copy(error = e.message) } },
+            )
+        }
+    }
+
+    fun assignTask(task: RecurringTask, userId: String) {
+        val user = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            assignChoreUseCase(user, task, userId)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+        }
+    }
+
+    fun acceptAssignment(assignment: ChoreAssignment) {
+        val user = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            respondToAssignmentUseCase.accept(user, assignment)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+        }
+    }
+
+    fun declineAssignment(assignment: ChoreAssignment, reason: String) {
+        val user = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            respondToAssignmentUseCase.decline(user, assignment, reason)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
         }
     }
 

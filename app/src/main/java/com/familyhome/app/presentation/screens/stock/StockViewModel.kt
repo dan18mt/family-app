@@ -8,16 +8,17 @@ import com.familyhome.app.domain.model.User
 import com.familyhome.app.domain.usecase.stock.*
 import com.familyhome.app.domain.usecase.user.GetCurrentUserUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class StockUiState(
-    val items: List<StockItem>      = emptyList(),
-    val currentUser: User?          = null,
+    val items: List<StockItem>           = emptyList(),
+    val currentUser: User?               = null,
     val selectedCategory: StockCategory? = null,
-    val isLoading: Boolean          = true,
-    val error: String?              = null,
+    val isLoading: Boolean               = true,
+    val error: String?                   = null,
 )
 
 @HiltViewModel
@@ -31,31 +32,32 @@ class StockViewModel @Inject constructor(
     private val _state = MutableStateFlow(StockUiState())
     val state = _state.asStateFlow()
 
+    /** Currently selected category filter — drives the item list via flatMapLatest. */
+    private val selectedCategory = MutableStateFlow<StockCategory?>(null)
+
     init {
         viewModelScope.launch {
             _state.update { it.copy(currentUser = getCurrentUserUseCase()) }
         }
 
+        // A single coroutine that re-subscribes to the right flow whenever
+        // selectedCategory changes, cancelling the previous subscription automatically.
+        @OptIn(ExperimentalCoroutinesApi::class)
         viewModelScope.launch {
-            getStockItemsUseCase().collect { items ->
-                _state.update { it.copy(items = items, isLoading = false) }
-            }
+            selectedCategory
+                .flatMapLatest { category ->
+                    if (category == null) getStockItemsUseCase()
+                    else getStockItemsUseCase.byCategory(category)
+                }
+                .collect { items ->
+                    _state.update { it.copy(items = items, isLoading = false) }
+                }
         }
     }
 
     fun filterByCategory(category: StockCategory?) {
         _state.update { it.copy(selectedCategory = category) }
-        viewModelScope.launch {
-            if (category == null) {
-                getStockItemsUseCase().collect { items ->
-                    _state.update { it.copy(items = items) }
-                }
-            } else {
-                getStockItemsUseCase.byCategory(category).collect { items ->
-                    _state.update { it.copy(items = items) }
-                }
-            }
-        }
+        selectedCategory.value = category
     }
 
     fun adjustQuantity(item: StockItem, delta: Float) {

@@ -7,6 +7,8 @@ enum class NotificationType {
     MEMBER_JOINED,
     CHORE_COMPLETED,
     CHORE_ASSIGNED,
+    CHORE_REMINDER,
+    CHORE_OVERDUE,
     EXPENSE_ADDED,
     GENERAL,
 }
@@ -18,4 +20,10 @@ data class AppNotification(
     val message: String,
     val timestamp: Long = System.currentTimeMillis(),
     val isRead: Boolean = false,
+    /**
+     * Optional stable identifier for the logical event (e.g. expenseId, taskId).
+     * Used by [NotificationCenter] to deduplicate: a new notification with the same
+     * sourceId replaces any older notification with that sourceId.
+     */
+    val sourceId: String? = null,
 )

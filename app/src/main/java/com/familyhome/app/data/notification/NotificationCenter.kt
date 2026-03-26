@@ -22,7 +22,17 @@ class NotificationCenter @Inject constructor() {
     val unreadCount: Int get() = _notifications.value.count { !it.isRead }
 
     fun post(notification: AppNotification) {
-        _notifications.update { listOf(notification) + it }
+        _notifications.update { list ->
+            // If sourceId is set, remove any earlier notification with the same sourceId
+            // before prepending the new one. This prevents duplicates when, e.g., a budget
+            // notification is re-sent 10 minutes after the first one.
+            val deduplicated = if (notification.sourceId != null) {
+                list.filter { it.sourceId != notification.sourceId }
+            } else {
+                list
+            }
+            listOf(notification) + deduplicated
+        }
     }
 
     fun markRead(id: String) {

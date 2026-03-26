@@ -15,4 +15,5 @@ data class ExpenseEntity(
     val loggedAt: Long,
     val expenseDate: Long,
     val aiExtracted: Boolean,
+    val customCategoryId: String? = null,
 )

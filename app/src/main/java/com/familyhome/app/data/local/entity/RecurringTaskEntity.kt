@@ -11,4 +11,6 @@ data class RecurringTaskEntity(
     val assignedTo: String?,
     val lastDoneAt: Long?,
     val nextDueAt: Long,
+    val scheduledAt: Long? = null,
+    val reminderMinutesBefore: Int? = null,
 )
