@@ -5,6 +5,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.familyhome.app.data.mapper.*
+import com.familyhome.app.domain.model.CustomStockCategory
+import com.familyhome.app.domain.model.CustomStockCategoryDto
 import com.familyhome.app.domain.model.SyncPayload
 import com.familyhome.app.domain.model.SyncResult
 import com.familyhome.app.domain.repository.*
@@ -26,6 +28,7 @@ class SyncRepositoryImpl @Inject constructor(
     private val choreRepository: ChoreRepository,
     private val expenseRepository: ExpenseRepository,
     private val budgetRepository: BudgetRepository,
+    private val customStockCategoryRepository: CustomStockCategoryRepository,
 ) {
     private val lastSyncKey = longPreferencesKey("last_sync_time")
     private val hostIpKey   = stringPreferencesKey("sync_host_ip")
@@ -78,22 +81,29 @@ class SyncRepositoryImpl @Inject constructor(
     // ── Internal helpers ─────────────────────────────────────────────────────
 
     private suspend fun buildLocalPayload() = SyncPayload(
-        users             = userRepository.getAllUsers().first().map { it.toDto() },
-        stockItems        = stockRepository.getAllItems().first().map { it.toDto() },
-        choreLogs         = choreRepository.getChoreHistory(0L).first().map { it.toDto() },
-        recurringTasks    = choreRepository.getRecurringTasks().first().map { it.toDto() },
-        choreAssignments  = choreRepository.getAllAssignments().first().map { it.toAssignmentDto() },
-        expenses          = expenseRepository.getAllExpenses().first().map { it.toDto() },
-        budgets           = budgetRepository.getAllBudgets().first().map { it.toDto() },
+        users                 = userRepository.getAllUsers().first().map { it.toDto() },
+        stockItems            = stockRepository.getAllItems().first().map { it.toDto() },
+        choreLogs             = choreRepository.getChoreHistory(0L).first().map { it.toDto() },
+        recurringTasks        = choreRepository.getRecurringTasks().first().map { it.toDto() },
+        choreAssignments      = choreRepository.getAllAssignments().first().map { it.toAssignmentDto() },
+        expenses              = expenseRepository.getAllExpenses().first().map { it.toDto() },
+        budgets               = budgetRepository.getAllBudgets().first().map { it.toDto() },
+        customStockCategories = customStockCategoryRepository.getAllCategories().first()
+            .map { CustomStockCategoryDto(it.id, it.name, it.iconName) },
     )
 
     private suspend fun mergeRemotePayload(payload: SyncPayload) {
-        payload.users?.let             { userRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
-        payload.stockItems?.let        { stockRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
-        payload.choreLogs?.let         { choreRepository.upsertAllLogs(it.map { dto -> dto.toDomain() }) }
-        payload.recurringTasks?.let    { choreRepository.upsertAllRecurring(it.map { dto -> dto.toDomain() }) }
-        payload.choreAssignments?.let  { choreRepository.upsertAllAssignments(it.map { dto -> dto.toAssignmentDomain() }) }
-        payload.expenses?.let          { expenseRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
-        payload.budgets?.let           { budgetRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.users?.let                 { userRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.stockItems?.let            { stockRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.choreLogs?.let             { choreRepository.upsertAllLogs(it.map { dto -> dto.toDomain() }) }
+        payload.recurringTasks?.let        { choreRepository.upsertAllRecurring(it.map { dto -> dto.toDomain() }) }
+        payload.choreAssignments?.let      { choreRepository.upsertAllAssignments(it.map { dto -> dto.toAssignmentDomain() }) }
+        payload.expenses?.let              { expenseRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.budgets?.let               { budgetRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.customStockCategories?.let {
+            customStockCategoryRepository.upsertAll(
+                it.map { dto -> CustomStockCategory(dto.id, dto.name, dto.iconName) }
+            )
+        }
     }
 }

@@ -10,6 +10,7 @@ data class StockItem(
     val minQuantity: Float,
     val updatedBy: String,
     val updatedAt: Long,
+    val customCategoryId: String? = null,
 ) {
     val isLowStock: Boolean get() = quantity <= minQuantity
 }

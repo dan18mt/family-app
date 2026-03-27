@@ -1,5 +1,6 @@
 package com.familyhome.app.domain.usecase.chore
 
+import com.familyhome.app.data.notification.AlarmScheduler
 import com.familyhome.app.domain.model.AssignmentStatus
 import com.familyhome.app.domain.model.ChoreAssignment
 import com.familyhome.app.domain.model.ChoreLog
@@ -190,6 +191,51 @@ class CompleteRecurringTaskUseCase @Inject constructor(
                 note     = "Recurring task completed",
             )
         )
+        return Result.success(Unit)
+    }
+}
+
+class DeleteChoreLogUseCase @Inject constructor(
+    private val choreRepository: ChoreRepository,
+) {
+    suspend operator fun invoke(actor: User, logId: String): Result<Unit> {
+        if (actor.role.name != "FATHER" && actor.role.name != "WIFE") {
+            return Result.failure(IllegalStateException("Only parents can delete chore logs."))
+        }
+        choreRepository.deleteChoreLog(logId)
+        return Result.success(Unit)
+    }
+}
+
+class UpdateRecurringTaskUseCase @Inject constructor(
+    private val choreRepository: ChoreRepository,
+    private val alarmScheduler: AlarmScheduler,
+) {
+    suspend operator fun invoke(actor: User, task: RecurringTask): Result<RecurringTask> {
+        if (!PermissionManager.canCreateRecurringTask(actor)) {
+            return Result.failure(IllegalStateException("You don't have permission to edit tasks."))
+        }
+        choreRepository.updateRecurringTask(task)
+        // Re-schedule alarm if needed
+        if (task.scheduledAt != null && task.reminderMinutesBefore != null) {
+            alarmScheduler.schedule(task)
+        } else {
+            alarmScheduler.cancel(task.id)
+        }
+        return Result.success(task)
+    }
+}
+
+class DeleteRecurringTaskUseCase @Inject constructor(
+    private val choreRepository: ChoreRepository,
+    private val alarmScheduler: AlarmScheduler,
+) {
+    suspend operator fun invoke(actor: User, task: RecurringTask): Result<Unit> {
+        if (!PermissionManager.canCreateRecurringTask(actor)) {
+            return Result.failure(IllegalStateException("You don't have permission to delete tasks."))
+        }
+        alarmScheduler.cancel(task.id)
+        choreRepository.deleteRecurringTask(task.id)
         return Result.success(Unit)
     }
 }

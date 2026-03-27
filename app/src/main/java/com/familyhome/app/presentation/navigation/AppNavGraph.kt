@@ -120,8 +120,7 @@ fun AppNavGraph(
         // ── Main screens ──────────────────────────────────────────────────────
         composable(Screen.Home.route) {
             HomeScreen(
-                onNavigateTo     = { navController.navigate(it.route) },
-                onNavigateToSync = { navController.navigate(Screen.SyncSettings.route) },
+                onNavigateTo = { navController.navigate(it.route) },
             )
         }
 
@@ -146,12 +145,6 @@ fun AppNavGraph(
         }
 
         // ── Settings ──────────────────────────────────────────────────────────
-        composable(Screen.SyncSettings.route) {
-            com.familyhome.app.presentation.screens.sync.SyncSettingsScreen(
-                onBack = { navController.popBackStack() }
-            )
-        }
-
         composable(Screen.Notifications.route) {
             NotificationsScreen(onBack = { navController.popBackStack() })
         }

@@ -1,5 +1,7 @@
 package com.familyhome.app.presentation.screens.home
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,12 +39,19 @@ import com.familyhome.app.presentation.theme.BudgetWarningColor
 @Composable
 fun HomeScreen(
     onNavigateTo: (Screen) -> Unit,
-    onNavigateToSync: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var roleDialogRequest by remember { mutableStateOf<JoinRequestDto?>(null) }
+
+    val pickImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null && state.currentUser != null) {
+            viewModel.updateProfile(state.currentUser!!.copy(avatarUri = uri.toString()))
+        }
+    }
 
     // Role assignment dialog for join request approvals
     roleDialogRequest?.let { request ->
@@ -60,6 +69,13 @@ fun HomeScreen(
         if (state.knockError != null) {
             snackbarHostState.showSnackbar(state.knockError!!)
             viewModel.dismissKnockError()
+        }
+    }
+
+    LaunchedEffect(state.syncError) {
+        if (state.syncError != null) {
+            snackbarHostState.showSnackbar(state.syncError!!)
+            viewModel.dismissSyncError()
         }
     }
 
@@ -95,8 +111,10 @@ fun HomeScreen(
                 actions = {
                     state.currentUser?.let { user ->
                         AvatarInitials(
-                            name     = user.name,
-                            modifier = Modifier.size(36.dp),
+                            name      = user.name,
+                            avatarUri = user.avatarUri,
+                            modifier  = Modifier.size(36.dp),
+                            onClick   = { pickImageLauncher.launch("image/*") },
                         )
                         Spacer(Modifier.width(4.dp))
                     }
@@ -116,12 +134,19 @@ fun HomeScreen(
                             )
                         }
                     }
-                    IconButton(onClick = onNavigateToSync) {
-                        Icon(
-                            Icons.Default.Sync,
-                            contentDescription = "Sync",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (state.isSyncing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp).padding(end = 4.dp),
+                            strokeWidth = 2.dp,
                         )
+                    } else {
+                        IconButton(onClick = { viewModel.manualSync() }) {
+                            Icon(
+                                Icons.Default.Sync,
+                                contentDescription = "Sync",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

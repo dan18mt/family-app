@@ -2,10 +2,6 @@ package com.familyhome.app.domain.model
 
 import kotlinx.serialization.Serializable
 
-/**
- * Full-snapshot payload exchanged between sync host and clients.
- * All fields are nullable so a partial push is possible (only changed collections).
- */
 @Serializable
 data class SyncPayload(
     val users: List<UserDto>? = null,
@@ -15,6 +11,7 @@ data class SyncPayload(
     val choreAssignments: List<ChoreAssignmentDto>? = null,
     val expenses: List<ExpenseDto>? = null,
     val budgets: List<BudgetDto>? = null,
+    val customStockCategories: List<CustomStockCategoryDto>? = null,
     val snapshotAt: Long = System.currentTimeMillis(),
 )
 
@@ -28,6 +25,11 @@ data class SyncPayload(
     val id: String, val name: String, val category: String,
     val quantity: Float, val unit: String, val minQuantity: Float,
     val updatedBy: String, val updatedAt: Long,
+    val customCategoryId: String? = null,
+)
+
+@Serializable data class CustomStockCategoryDto(
+    val id: String, val name: String, val iconName: String,
 )
 
 @Serializable data class ChoreLogDto(

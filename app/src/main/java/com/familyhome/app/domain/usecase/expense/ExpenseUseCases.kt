@@ -162,3 +162,39 @@ class CheckBudgetAlertUseCase @Inject constructor(
         }
     }
 }
+
+class UpdateExpenseUseCase @Inject constructor(
+    private val expenseRepository: ExpenseRepository,
+) {
+    suspend operator fun invoke(actor: User, expense: Expense): Result<Unit> {
+        expenseRepository.updateExpense(expense)
+        return Result.success(Unit)
+    }
+}
+
+class DeleteExpenseUseCase @Inject constructor(
+    private val expenseRepository: ExpenseRepository,
+) {
+    suspend operator fun invoke(actor: User, expenseId: String): Result<Unit> {
+        expenseRepository.deleteExpense(expenseId)
+        return Result.success(Unit)
+    }
+}
+
+class GetAllBudgetsUseCase @Inject constructor(
+    private val budgetRepository: BudgetRepository,
+) {
+    operator fun invoke(): Flow<List<Budget>> = budgetRepository.getAllBudgets()
+}
+
+class DeleteBudgetUseCase @Inject constructor(
+    private val budgetRepository: BudgetRepository,
+) {
+    suspend operator fun invoke(actor: User, budgetId: String): Result<Unit> {
+        if (!PermissionManager.canSetBudget(actor)) {
+            return Result.failure(IllegalStateException("Only Father can manage budgets."))
+        }
+        budgetRepository.deleteBudget(budgetId)
+        return Result.success(Unit)
+    }
+}

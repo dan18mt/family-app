@@ -2,6 +2,7 @@ package com.familyhome.app.presentation.screens.stock
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.familyhome.app.domain.model.CustomStockCategory
 import com.familyhome.app.domain.model.StockCategory
 import com.familyhome.app.domain.model.StockItem
 import com.familyhome.app.domain.model.User
@@ -14,11 +15,12 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class StockUiState(
-    val items: List<StockItem>           = emptyList(),
-    val currentUser: User?               = null,
-    val selectedCategory: StockCategory? = null,
-    val isLoading: Boolean               = true,
-    val error: String?                   = null,
+    val items: List<StockItem>                    = emptyList(),
+    val currentUser: User?                        = null,
+    val selectedCategory: StockCategory?          = null,
+    val customCategories: List<CustomStockCategory> = emptyList(),
+    val isLoading: Boolean                        = true,
+    val error: String?                            = null,
 )
 
 @HiltViewModel
@@ -26,13 +28,17 @@ class StockViewModel @Inject constructor(
     private val getCurrentUserUseCase: GetCurrentUserUseCase,
     private val getStockItemsUseCase: GetStockItemsUseCase,
     private val updateStockQuantityUseCase: UpdateStockQuantityUseCase,
+    private val updateStockItemUseCase: UpdateStockItemUseCase,
     private val deleteStockItemUseCase: DeleteStockItemUseCase,
+    private val getCustomStockCategoriesUseCase: GetCustomStockCategoriesUseCase,
+    private val addCustomStockCategoryUseCase: AddCustomStockCategoryUseCase,
+    private val updateCustomStockCategoryUseCase: UpdateCustomStockCategoryUseCase,
+    private val deleteCustomStockCategoryUseCase: DeleteCustomStockCategoryUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(StockUiState())
     val state = _state.asStateFlow()
 
-    /** Currently selected category filter — drives the item list via flatMapLatest. */
     private val selectedCategory = MutableStateFlow<StockCategory?>(null)
 
     init {
@@ -40,8 +46,6 @@ class StockViewModel @Inject constructor(
             _state.update { it.copy(currentUser = getCurrentUserUseCase()) }
         }
 
-        // A single coroutine that re-subscribes to the right flow whenever
-        // selectedCategory changes, cancelling the previous subscription automatically.
         @OptIn(ExperimentalCoroutinesApi::class)
         viewModelScope.launch {
             selectedCategory
@@ -52,6 +56,12 @@ class StockViewModel @Inject constructor(
                 .collect { items ->
                     _state.update { it.copy(items = items, isLoading = false) }
                 }
+        }
+
+        viewModelScope.launch {
+            getCustomStockCategoriesUseCase().collect { cats ->
+                _state.update { it.copy(customCategories = cats) }
+            }
         }
     }
 
@@ -64,16 +74,48 @@ class StockViewModel @Inject constructor(
         val actor = _state.value.currentUser ?: return
         viewModelScope.launch {
             val newQty = (item.quantity + delta).coerceAtLeast(0f)
-            val result = updateStockQuantityUseCase(actor, item.id, newQty)
-            result.onFailure { e -> _state.update { it.copy(error = e.message) } }
+            updateStockQuantityUseCase(actor, item.id, newQty)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+        }
+    }
+
+    fun updateItem(item: StockItem) {
+        val actor = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            updateStockItemUseCase(actor, item)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
         }
     }
 
     fun deleteItem(item: StockItem) {
         val actor = _state.value.currentUser ?: return
         viewModelScope.launch {
-            val result = deleteStockItemUseCase(actor, item.id)
-            result.onFailure { e -> _state.update { it.copy(error = e.message) } }
+            deleteStockItemUseCase(actor, item.id)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+        }
+    }
+
+    fun addCategory(name: String, iconName: String) {
+        val user = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            addCustomStockCategoryUseCase(user, name, iconName)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+        }
+    }
+
+    fun updateCategory(category: CustomStockCategory) {
+        val user = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            updateCustomStockCategoryUseCase(user, category)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+        }
+    }
+
+    fun deleteCategory(category: CustomStockCategory) {
+        val user = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            deleteCustomStockCategoryUseCase(user, category.id)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
         }
     }
 

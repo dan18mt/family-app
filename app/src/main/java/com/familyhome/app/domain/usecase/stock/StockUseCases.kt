@@ -32,19 +32,21 @@ class AddStockItemUseCase @Inject constructor(
         quantity: Float,
         unit: String,
         minQuantity: Float,
+        customCategoryId: String? = null,
     ): Result<StockItem> {
         if (!PermissionManager.canCreateStockItem(actor)) {
             return Result.failure(IllegalStateException("You don't have permission to add items."))
         }
         val item = StockItem(
-            id          = UUID.randomUUID().toString(),
-            name        = name,
-            category    = category,
-            quantity    = quantity,
-            unit        = unit,
-            minQuantity = minQuantity,
-            updatedBy   = actor.id,
-            updatedAt   = System.currentTimeMillis(),
+            id               = UUID.randomUUID().toString(),
+            name             = name,
+            category         = category,
+            quantity         = quantity,
+            unit             = unit,
+            minQuantity      = minQuantity,
+            updatedBy        = actor.id,
+            updatedAt        = System.currentTimeMillis(),
+            customCategoryId = customCategoryId,
         )
         stockRepository.insertItem(item)
         return Result.success(item)
@@ -80,6 +82,23 @@ class DeleteStockItemUseCase @Inject constructor(
             return Result.failure(IllegalStateException("You don't have permission to delete items."))
         }
         stockRepository.deleteItem(itemId)
+        return Result.success(Unit)
+    }
+}
+
+class UpdateStockItemUseCase @Inject constructor(
+    private val stockRepository: StockRepository,
+) {
+    suspend operator fun invoke(actor: User, item: StockItem): Result<Unit> {
+        if (!PermissionManager.canCreateStockItem(actor)) {
+            return Result.failure(IllegalStateException("You don't have permission to edit items."))
+        }
+        stockRepository.updateItem(
+            item.copy(
+                updatedBy = actor.id,
+                updatedAt = System.currentTimeMillis(),
+            )
+        )
         return Result.success(Unit)
     }
 }

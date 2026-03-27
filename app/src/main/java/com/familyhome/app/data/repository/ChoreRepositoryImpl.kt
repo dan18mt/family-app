@@ -27,6 +27,9 @@ class ChoreRepositoryImpl @Inject constructor(
     override suspend fun logChore(chore: ChoreLog) =
         choreLogDao.insertLog(chore.toEntity())
 
+    override suspend fun deleteChoreLog(id: String) =
+        choreLogDao.deleteLog(id)
+
     override suspend fun upsertAllLogs(logs: List<ChoreLog>) =
         choreLogDao.upsertAll(logs.map { it.toEntity() })
 
@@ -44,8 +47,6 @@ class ChoreRepositoryImpl @Inject constructor(
 
     override suspend fun upsertAllRecurring(tasks: List<RecurringTask>) =
         recurringTaskDao.upsertAll(tasks.map { it.toEntity() })
-
-    // ── Assignments ────────────────────────────────────────────────────────
 
     override fun getAllAssignments(): Flow<List<ChoreAssignment>> =
         choreAssignmentDao.getAllAssignments().map { list -> list.map { it.toDomain() } }

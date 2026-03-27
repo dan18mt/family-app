@@ -15,8 +15,9 @@ import com.familyhome.app.data.local.entity.*
         ExpenseEntity::class,
         BudgetEntity::class,
         CustomExpenseCategoryEntity::class,
+        CustomStockCategoryEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class FamilyDatabase : RoomDatabase() {
@@ -28,6 +29,7 @@ abstract class FamilyDatabase : RoomDatabase() {
     abstract fun expenseDao(): ExpenseDao
     abstract fun budgetDao(): BudgetDao
     abstract fun customExpenseCategoryDao(): CustomExpenseCategoryDao
+    abstract fun customStockCategoryDao(): CustomStockCategoryDao
 
     companion object {
         const val DATABASE_NAME = "family_home.db"

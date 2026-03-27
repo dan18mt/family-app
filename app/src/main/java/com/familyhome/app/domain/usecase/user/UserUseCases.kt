@@ -115,3 +115,12 @@ class DeleteFamilyMemberUseCase @Inject constructor(
         return Result.success(Unit)
     }
 }
+
+class UpdateProfileUseCase @Inject constructor(
+    private val userRepository: UserRepository,
+) {
+    suspend operator fun invoke(user: User): Result<Unit> {
+        userRepository.updateUser(user)
+        return Result.success(Unit)
+    }
+}

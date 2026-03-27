@@ -1,5 +1,6 @@
 package com.familyhome.app.presentation.screens.expenses
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -12,23 +13,23 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.familyhome.app.domain.model.CustomExpenseCategory
-import com.familyhome.app.domain.model.Expense
-import com.familyhome.app.domain.model.ExpenseCategory
-import com.familyhome.app.domain.model.Role
-import com.familyhome.app.domain.model.User
+import com.familyhome.app.domain.model.*
 import com.familyhome.app.presentation.components.LoadingScreen
 import com.familyhome.app.presentation.theme.BudgetWarningColor
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
 
-// ── Icon catalogue shown in the category picker ──────────────────────────────
+// ── Icon catalogue ────────────────────────────────────────────────────────────
 val CATEGORY_ICON_OPTIONS: List<Pair<String, ImageVector>> = listOf(
     "ShoppingCart"    to Icons.Default.ShoppingCart,
     "DirectionsCar"   to Icons.Default.DirectionsCar,
@@ -58,8 +59,18 @@ fun ExpensesScreen(
     viewModel: ExpensesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var showAddDialog       by remember { mutableStateOf(false) }
+    val snackbarHostState    = remember { SnackbarHostState() }
+    var showAddDialog        by remember { mutableStateOf(false) }
     var showManageCategories by remember { mutableStateOf(false) }
+    var showManageBudgets    by remember { mutableStateOf(false) }
+    var editExpense          by remember { mutableStateOf<Expense?>(null) }
+
+    LaunchedEffect(state.error) {
+        if (state.error != null) {
+            snackbarHostState.showSnackbar(state.error!!)
+            viewModel.clearError()
+        }
+    }
 
     if (showAddDialog) {
         AddExpenseDialog(
@@ -72,24 +83,46 @@ fun ExpensesScreen(
         )
     }
 
+    editExpense?.let { expense ->
+        EditExpenseDialog(
+            expense          = expense,
+            customCategories = state.customCategories,
+            onDismiss        = { editExpense = null },
+            onConfirm        = { updated -> viewModel.updateExpense(updated); editExpense = null },
+        )
+    }
+
     if (showManageCategories) {
         ManageCategoriesDialog(
-            categories    = state.customCategories,
-            currentUser   = state.currentUser,
-            onDismiss     = { showManageCategories = false },
-            onAdd         = { name, icon -> viewModel.addCategory(name, icon) },
-            onRename      = { cat, name -> viewModel.renameCategory(cat, name) },
-            onChangeIcon  = { cat, icon -> viewModel.changeCategoryIcon(cat, icon) },
-            onDelete      = { cat -> viewModel.deleteCategory(cat) },
+            categories   = state.customCategories,
+            currentUser  = state.currentUser,
+            onDismiss    = { showManageCategories = false },
+            onAdd        = { name, icon -> viewModel.addCategory(name, icon) },
+            onRename     = { cat, name -> viewModel.renameCategory(cat, name) },
+            onChangeIcon = { cat, icon -> viewModel.changeCategoryIcon(cat, icon) },
+            onDelete     = { cat -> viewModel.deleteCategory(cat) },
+        )
+    }
+
+    if (showManageBudgets) {
+        ManageBudgetsDialog(
+            budgets     = state.budgets,
+            allUsers    = state.allUsers,
+            currentUser = state.currentUser,
+            onDismiss   = { showManageBudgets = false },
+            onAdd       = { targetUserId, category, amount, period ->
+                viewModel.setBudget(targetUserId, category, amount, period)
+            },
+            onDelete    = { budget -> viewModel.deleteBudget(budget) },
         )
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Expenses") },
                 actions = {
-                    // Budget warning badge
                     state.budgetAlerts.filter { it.isWarning }.takeIf { it.isNotEmpty() }?.let {
                         IconButton(onClick = {}) {
                             Badge(containerColor = BudgetWarningColor) {
@@ -97,8 +130,10 @@ fun ExpensesScreen(
                             }
                         }
                     }
-                    // Manage categories (leader/wife only)
                     if (state.currentUser?.role == Role.FATHER || state.currentUser?.role == Role.WIFE) {
+                        IconButton(onClick = { showManageBudgets = true }) {
+                            Icon(Icons.Default.AccountBalanceWallet, "Manage budgets")
+                        }
                         IconButton(onClick = { showManageCategories = true }) {
                             Icon(Icons.Default.Settings, "Manage categories")
                         }
@@ -119,6 +154,18 @@ fun ExpensesScreen(
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             item { SummaryCard(totalCents = state.totalThisMonth) }
+
+            item {
+                ExpenseChartCard(
+                    expenses         = state.expenses,
+                    allUsers         = state.allUsers,
+                    currentUser      = state.currentUser,
+                    selectedPeriod   = state.selectedChartPeriod,
+                    selectedMemberId = state.selectedMemberId,
+                    onPeriodChange   = { viewModel.setChartPeriod(it) },
+                    onMemberChange   = { viewModel.setSelectedMember(it) },
+                )
+            }
 
             state.budgetAlerts.filter { it.isWarning }.forEach { alert ->
                 item {
@@ -152,8 +199,159 @@ fun ExpensesScreen(
                         customCategories = state.customCategories,
                         allUsers         = state.allUsers,
                         currentUser      = state.currentUser,
+                        canEdit          = state.currentUser?.role == Role.FATHER ||
+                                           (state.currentUser?.role == Role.WIFE && expense.paidBy == state.currentUser?.id),
+                        onEdit           = { editExpense = expense },
+                        onDelete         = { viewModel.deleteExpense(expense) },
                     )
                     HorizontalDivider()
+                }
+            }
+        }
+    }
+}
+
+// ── Expense chart card ────────────────────────────────────────────────────────
+
+@Composable
+private fun ExpenseChartCard(
+    expenses: List<Expense>,
+    allUsers: List<User>,
+    currentUser: User?,
+    selectedPeriod: ChartPeriod,
+    selectedMemberId: String?,
+    onPeriodChange: (ChartPeriod) -> Unit,
+    onMemberChange: (String?) -> Unit,
+) {
+    val effectiveMemberId = if (currentUser?.role == Role.FATHER) selectedMemberId else currentUser?.id
+    val filteredExpenses = expenses.filter { expense ->
+        if (effectiveMemberId != null) expense.paidBy == effectiveMemberId else true
+    }.filter { expense ->
+        val cutoff = if (selectedPeriod == ChartPeriod.WEEKLY) {
+            System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
+        } else {
+            val cal = Calendar.getInstance()
+            cal.set(Calendar.DAY_OF_MONTH, 1)
+            cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
+            cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+            cal.timeInMillis
+        }
+        expense.expenseDate >= cutoff
+    }
+
+    val byCategory = filteredExpenses.groupBy { it.category }
+        .mapValues { (_, v) -> v.sumOf { it.amount } }
+        .entries.sortedByDescending { it.value }.take(6)
+
+    val maxAmount = byCategory.maxOfOrNull { it.value } ?: 1L
+    val barColors = listOf(
+        Color(0xFF4CAF50), Color(0xFF2196F3), Color(0xFFFF9800),
+        Color(0xFFE91E63), Color(0xFF9C27B0), Color(0xFF00BCD4),
+    )
+
+    ElevatedCard(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically,
+            ) {
+                Text("Spending by category", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FilterChip(
+                        selected = selectedPeriod == ChartPeriod.MONTHLY,
+                        onClick  = { onPeriodChange(ChartPeriod.MONTHLY) },
+                        label    = { Text("Month") },
+                    )
+                    FilterChip(
+                        selected = selectedPeriod == ChartPeriod.WEEKLY,
+                        onClick  = { onPeriodChange(ChartPeriod.WEEKLY) },
+                        label    = { Text("Week") },
+                    )
+                }
+            }
+
+            if (currentUser?.role == Role.FATHER && allUsers.size > 1) {
+                Spacer(Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    item {
+                        FilterChip(
+                            selected = selectedMemberId == null,
+                            onClick  = { onMemberChange(null) },
+                            label    = { Text("All") },
+                        )
+                    }
+                    items(allUsers) { user ->
+                        FilterChip(
+                            selected = selectedMemberId == user.id,
+                            onClick  = { onMemberChange(user.id) },
+                            label    = { Text(user.name) },
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            if (byCategory.isEmpty()) {
+                Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
+                    Text("No expenses in this period", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                ) {
+                    val barWidth   = size.width / (byCategory.size * 2f)
+                    val chartH     = size.height - 20f
+                    byCategory.forEachIndexed { i, (cat, amount) ->
+                        val barH   = (amount.toFloat() / maxAmount.toFloat()) * chartH
+                        val left   = i * barWidth * 2f + barWidth / 2f
+                        val top    = chartH - barH
+                        val color  = barColors[i % barColors.size]
+                        drawRect(
+                            color   = color,
+                            topLeft = Offset(left, top),
+                            size    = Size(barWidth, barH),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    val currFmt = NumberFormat.getCurrencyInstance(Locale("id", "ID"))
+                    byCategory.forEachIndexed { i, (cat, amount) ->
+                        Row(
+                            modifier          = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .then(Modifier),
+                            ) {
+                                Canvas(modifier = Modifier.fillMaxSize()) {
+                                    drawRect(barColors[i % barColors.size])
+                                }
+                            }
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                cat.displayName,
+                                style    = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                currFmt.format(amount / 100.0),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -181,22 +379,20 @@ private fun ExpenseRow(
     customCategories: List<CustomExpenseCategory>,
     allUsers: List<User>,
     currentUser: User?,
+    canEdit: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
 ) {
-    val fmt        = SimpleDateFormat("dd MMM", Locale.getDefault())
-    val amountFmt  = NumberFormat.getCurrencyInstance(Locale("id", "ID")).format(expense.amount / 100.0)
+    val fmt       = SimpleDateFormat("dd MMM", Locale.getDefault())
+    val amountFmt = NumberFormat.getCurrencyInstance(Locale("id", "ID")).format(expense.amount / 100.0)
     val categoryLabel = if (expense.customCategoryId != null) {
         customCategories.find { it.id == expense.customCategoryId }?.name ?: expense.category.displayName
-    } else {
-        expense.category.displayName
-    }
+    } else expense.category.displayName
     val categoryIcon = if (expense.customCategoryId != null) {
         val iconName = customCategories.find { it.id == expense.customCategoryId }?.iconName ?: "Category"
         iconVectorForName(iconName)
-    } else {
-        Icons.Default.Receipt
-    }
+    } else Icons.Default.Receipt
 
-    // Show payer name for FATHER (and WIFE seeing kids' expenses)
     val showPayer = currentUser?.role == Role.FATHER ||
         (currentUser?.role == Role.WIFE && expense.paidBy != currentUser.id)
     val payerName = if (showPayer) allUsers.find { it.id == expense.paidBy }?.name else null
@@ -207,20 +403,29 @@ private fun ExpenseRow(
             Column {
                 Text("$categoryLabel · ${fmt.format(Date(expense.expenseDate))}")
                 if (payerName != null) {
-                    Text(
-                        "Paid by: $payerName",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary,
-                    )
+                    Text("Paid by: $payerName", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary)
                 }
             }
         },
-        trailingContent   = {
-            Column(horizontalAlignment = Alignment.End) {
-                Text(amountFmt, style = MaterialTheme.typography.titleMedium)
-                if (expense.aiExtracted) {
-                    Text("via AI", style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary)
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(amountFmt, style = MaterialTheme.typography.titleMedium)
+                    if (expense.aiExtracted) {
+                        Text("via AI", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary)
+                    }
+                }
+                if (canEdit) {
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Default.Edit, "Edit", tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp))
+                    }
                 }
             }
         },
@@ -237,63 +442,51 @@ private fun AddExpenseDialog(
     onDismiss: () -> Unit,
     onConfirm: (Long, ExpenseCategory, String?, String) -> Unit,
 ) {
-    var amountText     by remember { mutableStateOf("") }
-    var description    by remember { mutableStateOf("") }
-    var builtInCat     by remember { mutableStateOf(ExpenseCategory.OTHER) }
-    var customCatId    by remember { mutableStateOf<String?>(null) }
-    var expanded       by remember { mutableStateOf(false) }
+    var amountText  by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var builtInCat  by remember { mutableStateOf(ExpenseCategory.OTHER) }
+    var customCatId by remember { mutableStateOf<String?>(null) }
+    var expanded    by remember { mutableStateOf(false) }
 
-    // Unified label for the selected category
-    val selectedLabel = customCatId?.let { id ->
-        customCategories.find { it.id == id }?.name
-    } ?: builtInCat.displayName
+    val selectedLabel = customCatId?.let { id -> customCategories.find { it.id == id }?.name }
+        ?: builtInCat.displayName
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title            = { Text("Add expense") },
-        text             = {
+        title = { Text("Add expense") },
+        text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
-                    value           = amountText,
-                    onValueChange   = { amountText = it },
-                    label           = { Text("Amount (IDR)") },
+                    value = amountText, onValueChange = { amountText = it },
+                    label = { Text("Amount (IDR)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine      = true,
-                    modifier        = Modifier.fillMaxWidth(),
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
-                    value         = description,
-                    onValueChange = { description = it },
-                    label         = { Text("Description") },
-                    singleLine    = true,
-                    modifier      = Modifier.fillMaxWidth(),
+                    value = description, onValueChange = { description = it },
+                    label = { Text("Description") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                 )
-                // Category dropdown (built-in + custom)
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                     OutlinedTextField(
-                        value         = selectedLabel,
-                        onValueChange = {},
-                        readOnly      = true,
-                        label         = { Text("Category") },
-                        trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                        modifier      = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                        value = selectedLabel, onValueChange = {}, readOnly = true,
+                        label = { Text("Category") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                     )
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        // Built-in categories
                         ExpenseCategory.entries.forEach { cat ->
                             DropdownMenuItem(
-                                text    = { Text(cat.displayName) },
+                                text = { Text(cat.displayName) },
                                 onClick = { builtInCat = cat; customCatId = null; expanded = false },
                             )
                         }
-                        // Custom categories
                         if (customCategories.isNotEmpty()) {
                             HorizontalDivider()
                             customCategories.forEach { cat ->
                                 DropdownMenuItem(
-                                    text         = { Text(cat.name) },
-                                    leadingIcon  = { Icon(iconVectorForName(cat.iconName), null, Modifier.size(18.dp)) },
-                                    onClick      = { customCatId = cat.id; expanded = false },
+                                    text        = { Text(cat.name) },
+                                    leadingIcon = { Icon(iconVectorForName(cat.iconName), null, Modifier.size(18.dp)) },
+                                    onClick     = { customCatId = cat.id; expanded = false },
                                 )
                             }
                         }
@@ -305,6 +498,80 @@ private fun AddExpenseDialog(
             Button(onClick = {
                 val amount = amountText.toLongOrNull()?.times(100) ?: return@Button
                 onConfirm(amount, builtInCat, customCatId, description)
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+// ── Edit expense dialog ───────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditExpenseDialog(
+    expense: Expense,
+    customCategories: List<CustomExpenseCategory>,
+    onDismiss: () -> Unit,
+    onConfirm: (Expense) -> Unit,
+) {
+    val amountInIdr = expense.amount / 100
+    var amountText  by remember { mutableStateOf(amountInIdr.toString()) }
+    var description by remember { mutableStateOf(expense.description) }
+    var builtInCat  by remember { mutableStateOf(expense.category) }
+    var customCatId by remember { mutableStateOf(expense.customCategoryId) }
+    var expanded    by remember { mutableStateOf(false) }
+
+    val selectedLabel = customCatId?.let { id -> customCategories.find { it.id == id }?.name }
+        ?: builtInCat.displayName
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit expense") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = amountText, onValueChange = { amountText = it },
+                    label = { Text("Amount (IDR)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = description, onValueChange = { description = it },
+                    label = { Text("Description") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+                    OutlinedTextField(
+                        value = selectedLabel, onValueChange = {}, readOnly = true,
+                        label = { Text("Category") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        ExpenseCategory.entries.forEach { cat ->
+                            DropdownMenuItem(
+                                text = { Text(cat.displayName) },
+                                onClick = { builtInCat = cat; customCatId = null; expanded = false },
+                            )
+                        }
+                        if (customCategories.isNotEmpty()) {
+                            HorizontalDivider()
+                            customCategories.forEach { cat ->
+                                DropdownMenuItem(
+                                    text        = { Text(cat.name) },
+                                    leadingIcon = { Icon(iconVectorForName(cat.iconName), null, Modifier.size(18.dp)) },
+                                    onClick     = { customCatId = cat.id; expanded = false },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val amount = amountText.toLongOrNull()?.times(100) ?: return@Button
+                onConfirm(expense.copy(amount = amount, description = description,
+                    category = builtInCat, customCategoryId = customCatId))
             }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
@@ -323,8 +590,8 @@ private fun ManageCategoriesDialog(
     onChangeIcon: (CustomExpenseCategory, String) -> Unit,
     onDelete: (CustomExpenseCategory) -> Unit,
 ) {
-    var showAddForm   by remember { mutableStateOf(false) }
-    var editingCat    by remember { mutableStateOf<CustomExpenseCategory?>(null) }
+    var showAddForm by remember { mutableStateOf(false) }
+    var editingCat  by remember { mutableStateOf<CustomExpenseCategory?>(null) }
 
     if (showAddForm) {
         AddCategoryForm(
@@ -349,8 +616,8 @@ private fun ManageCategoriesDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title            = { Text("Expense categories") },
-        text             = {
+        title = { Text("Expense categories") },
+        text = {
             Column {
                 if (categories.isEmpty()) {
                     Text("No custom categories yet.", style = MaterialTheme.typography.bodyMedium)
@@ -358,9 +625,7 @@ private fun ManageCategoriesDialog(
                     categories.forEach { cat ->
                         ListItem(
                             headlineContent = { Text(cat.name) },
-                            leadingContent  = {
-                                Icon(iconVectorForName(cat.iconName), null)
-                            },
+                            leadingContent  = { Icon(iconVectorForName(cat.iconName), null) },
                             trailingContent = {
                                 Row {
                                     IconButton(onClick = { editingCat = cat }) {
@@ -389,25 +654,16 @@ private fun ManageCategoriesDialog(
 }
 
 @Composable
-private fun AddCategoryForm(
-    onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Unit,
-) {
+private fun AddCategoryForm(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
     var name         by remember { mutableStateOf("") }
     var selectedIcon by remember { mutableStateOf("Category") }
-
     AlertDialog(
         onDismissRequest = onDismiss,
-        title            = { Text("New category") },
-        text             = {
+        title = { Text("New category") },
+        text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value         = name,
-                    onValueChange = { name = it },
-                    label         = { Text("Category name") },
-                    singleLine    = true,
-                    modifier      = Modifier.fillMaxWidth(),
-                )
+                OutlinedTextField(value = name, onValueChange = { name = it },
+                    label = { Text("Category name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Text("Choose icon:", style = MaterialTheme.typography.labelMedium)
                 IconPicker(selected = selectedIcon, onSelect = { selectedIcon = it })
             }
@@ -427,19 +683,13 @@ private fun EditCategoryForm(
 ) {
     var name         by remember { mutableStateOf(category.name) }
     var selectedIcon by remember { mutableStateOf(category.iconName) }
-
     AlertDialog(
         onDismissRequest = onDismiss,
-        title            = { Text("Edit category") },
-        text             = {
+        title = { Text("Edit category") },
+        text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value         = name,
-                    onValueChange = { name = it },
-                    label         = { Text("Category name") },
-                    singleLine    = true,
-                    modifier      = Modifier.fillMaxWidth(),
-                )
+                OutlinedTextField(value = name, onValueChange = { name = it },
+                    label = { Text("Category name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Text("Choose icon:", style = MaterialTheme.typography.labelMedium)
                 IconPicker(selected = selectedIcon, onSelect = { selectedIcon = it })
             }
@@ -451,7 +701,6 @@ private fun EditCategoryForm(
     )
 }
 
-/** Horizontally scrollable grid of icon chips. */
 @Composable
 private fun IconPicker(selected: String, onSelect: (String) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -463,4 +712,162 @@ private fun IconPicker(selected: String, onSelect: (String) -> Unit) {
             )
         }
     }
+}
+
+// ── Manage budgets dialog ─────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ManageBudgetsDialog(
+    budgets: List<Budget>,
+    allUsers: List<User>,
+    currentUser: User?,
+    onDismiss: () -> Unit,
+    onAdd: (String?, ExpenseCategory?, Long, BudgetPeriod) -> Unit,
+    onDelete: (Budget) -> Unit,
+) {
+    var showAddForm by remember { mutableStateOf(false) }
+    val currFmt = NumberFormat.getCurrencyInstance(Locale("id", "ID"))
+
+    if (showAddForm) {
+        AddBudgetForm(
+            allUsers    = allUsers,
+            currentUser = currentUser,
+            onDismiss   = { showAddForm = false },
+            onConfirm   = { targetUserId, category, amount, period ->
+                onAdd(targetUserId, category, amount, period)
+                showAddForm = false
+            },
+        )
+        return
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Budgets") },
+        text = {
+            Column {
+                if (budgets.isEmpty()) {
+                    Text("No budgets set.", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    budgets.forEach { budget ->
+                        val targetName = when {
+                            budget.targetUserId == null -> "All family"
+                            else -> allUsers.find { it.id == budget.targetUserId }?.name ?: "Unknown"
+                        }
+                        ListItem(
+                            headlineContent   = {
+                                Text("${budget.category?.displayName ?: "Overall"} · $targetName")
+                            },
+                            supportingContent = {
+                                Text("${currFmt.format(budget.limitAmount / 100.0)} / ${budget.period.displayName}")
+                            },
+                            trailingContent = {
+                                IconButton(onClick = { onDelete(budget) }) {
+                                    Icon(Icons.Default.Delete, "Delete",
+                                        tint = MaterialTheme.colorScheme.error)
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { showAddForm = true }) {
+                Icon(Icons.Default.Add, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Add budget")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddBudgetForm(
+    allUsers: List<User>,
+    currentUser: User?,
+    onDismiss: () -> Unit,
+    onConfirm: (String?, ExpenseCategory?, Long, BudgetPeriod) -> Unit,
+) {
+    var amountText      by remember { mutableStateOf("") }
+    var category        by remember { mutableStateOf<ExpenseCategory?>(null) }
+    var targetUserId    by remember { mutableStateOf<String?>(null) }
+    var period          by remember { mutableStateOf(BudgetPeriod.MONTHLY) }
+    var catExpanded     by remember { mutableStateOf(false) }
+    var memberExpanded  by remember { mutableStateOf(false) }
+    var periodExpanded  by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add budget") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = amountText, onValueChange = { amountText = it },
+                    label = { Text("Limit amount (IDR)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+                ExposedDropdownMenuBox(expanded = catExpanded, onExpandedChange = { catExpanded = it }) {
+                    OutlinedTextField(
+                        value = category?.displayName ?: "All categories", onValueChange = {}, readOnly = true,
+                        label = { Text("Category (optional)") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(catExpanded) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(expanded = catExpanded, onDismissRequest = { catExpanded = false }) {
+                        DropdownMenuItem(text = { Text("All categories") },
+                            onClick = { category = null; catExpanded = false })
+                        ExpenseCategory.entries.forEach { cat ->
+                            DropdownMenuItem(text = { Text(cat.displayName) },
+                                onClick = { category = cat; catExpanded = false })
+                        }
+                    }
+                }
+                ExposedDropdownMenuBox(expanded = periodExpanded, onExpandedChange = { periodExpanded = it }) {
+                    OutlinedTextField(
+                        value = period.displayName, onValueChange = {}, readOnly = true,
+                        label = { Text("Period") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(periodExpanded) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(expanded = periodExpanded, onDismissRequest = { periodExpanded = false }) {
+                        BudgetPeriod.entries.forEach { p ->
+                            DropdownMenuItem(text = { Text(p.displayName) },
+                                onClick = { period = p; periodExpanded = false })
+                        }
+                    }
+                }
+                if (currentUser?.role == Role.FATHER && allUsers.size > 1) {
+                    ExposedDropdownMenuBox(expanded = memberExpanded, onExpandedChange = { memberExpanded = it }) {
+                        OutlinedTextField(
+                            value = allUsers.find { it.id == targetUserId }?.name ?: "All family",
+                            onValueChange = {}, readOnly = true,
+                            label = { Text("Apply to") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(memberExpanded) },
+                            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                        )
+                        ExposedDropdownMenu(expanded = memberExpanded, onDismissRequest = { memberExpanded = false }) {
+                            DropdownMenuItem(text = { Text("All family") },
+                                onClick = { targetUserId = null; memberExpanded = false })
+                            allUsers.forEach { user ->
+                                DropdownMenuItem(text = { Text(user.name) },
+                                    onClick = { targetUserId = user.id; memberExpanded = false })
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val amount = amountText.toLongOrNull()?.times(100) ?: return@Button
+                onConfirm(targetUserId, category, amount, period)
+            }) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

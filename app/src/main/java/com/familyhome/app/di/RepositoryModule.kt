@@ -35,4 +35,9 @@ abstract class RepositoryModule {
     abstract fun bindCustomExpenseCategoryRepository(
         impl: CustomExpenseCategoryRepositoryImpl,
     ): CustomExpenseCategoryRepository
+
+    @Binds @Singleton
+    abstract fun bindCustomStockCategoryRepository(
+        impl: CustomStockCategoryRepositoryImpl,
+    ): CustomStockCategoryRepository
 }

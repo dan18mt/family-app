@@ -8,6 +8,8 @@ import com.familyhome.app.data.onboarding.JoinRequestDto
 import com.familyhome.app.data.onboarding.KnockDto
 import com.familyhome.app.data.onboarding.OnboardingState
 import com.familyhome.app.domain.model.AppNotification
+import com.familyhome.app.domain.model.CustomStockCategory
+import com.familyhome.app.domain.model.CustomStockCategoryDto
 import com.familyhome.app.domain.model.NotificationType
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.SyncPayload
@@ -42,6 +44,7 @@ class SyncServer @Inject constructor(
     private val choreRepository: ChoreRepository,
     private val expenseRepository: ExpenseRepository,
     private val budgetRepository: BudgetRepository,
+    private val customStockCategoryRepository: CustomStockCategoryRepository,
     private val onboardingState: OnboardingState,
     private val notificationCenter: NotificationCenter,
 ) {
@@ -80,12 +83,15 @@ class SyncServer @Inject constructor(
 
     private suspend fun handlePull(call: ApplicationCall) {
         val payload = SyncPayload(
-            users          = userRepository.getAllUsers().first().map { it.toDto() },
-            stockItems     = stockRepository.getAllItems().first().map { it.toDto() },
-            choreLogs      = choreRepository.getChoreHistory(0L).first().map { it.toDto() },
-            recurringTasks = choreRepository.getRecurringTasks().first().map { it.toDto() },
-            expenses       = expenseRepository.getAllExpenses().first().map { it.toDto() },
-            budgets        = budgetRepository.getAllBudgets().first().map { it.toDto() },
+            users               = userRepository.getAllUsers().first().map { it.toDto() },
+            stockItems          = stockRepository.getAllItems().first().map { it.toDto() },
+            choreLogs           = choreRepository.getChoreHistory(0L).first().map { it.toDto() },
+            recurringTasks      = choreRepository.getRecurringTasks().first().map { it.toDto() },
+            choreAssignments    = choreRepository.getAllAssignments().first().map { it.toAssignmentDto() },
+            expenses            = expenseRepository.getAllExpenses().first().map { it.toDto() },
+            budgets             = budgetRepository.getAllBudgets().first().map { it.toDto() },
+            customStockCategories = customStockCategoryRepository.getAllCategories().first()
+                .map { CustomStockCategoryDto(it.id, it.name, it.iconName) },
         )
         call.respond(payload)
     }
@@ -100,35 +106,36 @@ class SyncServer @Inject constructor(
     private fun postSyncNotifications(payload: SyncPayload) {
         payload.choreLogs?.forEach { log ->
             notificationCenter.post(AppNotification(
-                type    = NotificationType.CHORE_COMPLETED,
-                title   = "Chore completed",
-                message = log.taskName,
-            ))
-        }
-        payload.recurringTasks?.forEach { task ->
-            notificationCenter.post(AppNotification(
-                type    = NotificationType.CHORE_ASSIGNED,
-                title   = "Chore assigned",
-                message = task.taskName,
+                type     = NotificationType.CHORE_COMPLETED,
+                title    = "Chore completed",
+                message  = log.taskName,
+                sourceId = "chore_log_${log.id}",
             ))
         }
         payload.expenses?.forEach { expense ->
             notificationCenter.post(AppNotification(
-                type    = NotificationType.EXPENSE_ADDED,
-                title   = "New expense",
-                message = "${expense.description} — ${expense.category.lowercase().replaceFirstChar { it.uppercase() }}",
+                type     = NotificationType.EXPENSE_ADDED,
+                title    = "New expense",
+                message  = "${expense.description} — ${expense.category.lowercase().replaceFirstChar { it.uppercase() }}",
+                sourceId = "expense_${expense.id}",
             ))
         }
     }
 
     /** Last-write-wins merge: upsert everything received from the client. */
     private suspend fun mergePayload(payload: SyncPayload) {
-        payload.users?.let          { userRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
-        payload.stockItems?.let     { stockRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
-        payload.choreLogs?.let      { choreRepository.upsertAllLogs(it.map { dto -> dto.toDomain() }) }
-        payload.recurringTasks?.let { choreRepository.upsertAllRecurring(it.map { dto -> dto.toDomain() }) }
-        payload.expenses?.let       { expenseRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
-        payload.budgets?.let        { budgetRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.users?.let                 { userRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.stockItems?.let            { stockRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.choreLogs?.let             { choreRepository.upsertAllLogs(it.map { dto -> dto.toDomain() }) }
+        payload.recurringTasks?.let        { choreRepository.upsertAllRecurring(it.map { dto -> dto.toDomain() }) }
+        payload.choreAssignments?.let      { choreRepository.upsertAllAssignments(it.map { dto -> dto.toAssignmentDomain() }) }
+        payload.expenses?.let              { expenseRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.budgets?.let               { budgetRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.customStockCategories?.let {
+            customStockCategoryRepository.upsertAll(
+                it.map { dto -> CustomStockCategory(dto.id, dto.name, dto.iconName) }
+            )
+        }
     }
 
     // ── Onboarding handlers ──────────────────────────────────────────────────

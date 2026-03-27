@@ -6,6 +6,7 @@ import com.familyhome.app.data.local.dao.BudgetDao
 import com.familyhome.app.data.local.dao.ChoreAssignmentDao
 import com.familyhome.app.data.local.dao.ChoreLogDao
 import com.familyhome.app.data.local.dao.CustomExpenseCategoryDao
+import com.familyhome.app.data.local.dao.CustomStockCategoryDao
 import com.familyhome.app.data.local.dao.ExpenseDao
 import com.familyhome.app.data.local.dao.RecurringTaskDao
 import com.familyhome.app.data.local.dao.StockItemDao
@@ -36,4 +37,5 @@ object DatabaseModule {
     @Provides fun provideExpenseDao(db: FamilyDatabase):                    ExpenseDao                 = db.expenseDao()
     @Provides fun provideBudgetDao(db: FamilyDatabase):                     BudgetDao                  = db.budgetDao()
     @Provides fun provideCustomExpenseCategoryDao(db: FamilyDatabase):      CustomExpenseCategoryDao   = db.customExpenseCategoryDao()
+    @Provides fun provideCustomStockCategoryDao(db: FamilyDatabase):        CustomStockCategoryDao     = db.customStockCategoryDao()
 }

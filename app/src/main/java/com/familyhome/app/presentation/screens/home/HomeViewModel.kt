@@ -11,16 +11,19 @@ import com.familyhome.app.data.onboarding.NetworkMonitor
 import com.familyhome.app.data.onboarding.NsdHelper
 import com.familyhome.app.data.onboarding.OnboardingClient
 import com.familyhome.app.data.onboarding.OnboardingState
-import com.familyhome.app.data.sync.SyncServer
-import com.familyhome.app.domain.model.StockItem
-import com.familyhome.app.domain.model.User
 import com.familyhome.app.data.sync.SyncRepositoryImpl
+import com.familyhome.app.data.sync.SyncServer
 import com.familyhome.app.domain.model.Role
+import com.familyhome.app.domain.model.StockItem
+import com.familyhome.app.domain.model.SyncResult
+import com.familyhome.app.domain.model.User
 import com.familyhome.app.domain.usecase.expense.CheckBudgetAlertUseCase
 import com.familyhome.app.domain.usecase.stock.GetLowStockItemsUseCase
 import com.familyhome.app.domain.usecase.user.GetCurrentUserUseCase
 import com.familyhome.app.domain.usecase.user.GetFamilyMembersUseCase
+import com.familyhome.app.domain.usecase.user.UpdateProfileUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.net.Inet4Address
@@ -34,12 +37,17 @@ data class HomeUiState(
     val lowStockItems: List<StockItem> = emptyList(),
     val budgetAlerts: List<CheckBudgetAlertUseCase.BudgetAlert> = emptyList(),
     val isLoading: Boolean = true,
+    val isSyncing: Boolean = false,
+    val lastSyncAt: Long? = null,
+    val syncError: String? = null,
     val pendingKnocks: List<KnockDto> = emptyList(),
     val invitingKnockIds: Set<String> = emptySet(),
     val knockError: String? = null,
     val pendingJoinRequests: List<JoinRequestDto> = emptyList(),
     val unreadNotificationCount: Int = 0,
 )
+
+private const val AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -54,6 +62,7 @@ class HomeViewModel @Inject constructor(
     private val onboardingState: OnboardingState,
     private val notificationCenter: NotificationCenter,
     private val networkMonitor: NetworkMonitor,
+    private val updateProfileUseCase: UpdateProfileUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -69,7 +78,6 @@ class HomeViewModel @Inject constructor(
             _state.update { it.copy(currentUser = currentUser) }
 
             if (currentUser != null) {
-                // Father's sync server and NSD advertising start automatically
                 if (currentUser.role == Role.FATHER) {
                     syncRepository.startHostServer()
                     nsdHelper.startAdvertising(
@@ -77,13 +85,15 @@ class HomeViewModel @Inject constructor(
                         port        = 8765,
                         serviceType = NsdHelper.FATHER_SERVICE_TYPE,
                     )
+                } else {
+                    // Start periodic auto-sync for non-Father members
+                    startAutoSync()
                 }
                 val alerts = checkBudgetAlertUseCase(currentUser.id)
                 _state.update { it.copy(budgetAlerts = alerts) }
             }
         }
 
-        // Reactive streams
         viewModelScope.launch {
             getFamilyMembersUseCase().collect { members ->
                 _state.update { it.copy(familyMembers = members, isLoading = false) }
@@ -112,6 +122,42 @@ class HomeViewModel @Inject constructor(
             notificationCenter.notifications.collect { notifications ->
                 _state.update { it.copy(unreadNotificationCount = notifications.count { n -> !n.isRead }) }
             }
+        }
+
+        viewModelScope.launch {
+            syncRepository.getLastSyncTimeFlow().collect { ts ->
+                _state.update { it.copy(lastSyncAt = ts) }
+            }
+        }
+    }
+
+    private fun startAutoSync() {
+        viewModelScope.launch {
+            while (true) {
+                delay(AUTO_SYNC_INTERVAL_MS)
+                performSync()
+            }
+        }
+    }
+
+    fun manualSync() {
+        if (_state.value.isSyncing) return
+        viewModelScope.launch { performSync() }
+    }
+
+    private suspend fun performSync() {
+        _state.update { it.copy(isSyncing = true, syncError = null) }
+        when (val result = syncRepository.syncWithHost()) {
+            is SyncResult.Success -> _state.update { it.copy(isSyncing = false, lastSyncAt = result.syncedAt) }
+            is SyncResult.Error   -> _state.update { it.copy(isSyncing = false, syncError = result.message) }
+        }
+    }
+
+    fun updateProfile(user: User) {
+        viewModelScope.launch {
+            updateProfileUseCase(user)
+                .onSuccess { _state.update { it.copy(currentUser = user) } }
+                .onFailure { e -> Log.e("HomeViewModel", "Failed to update profile", e) }
         }
     }
 
@@ -151,9 +197,8 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun dismissKnockError() {
-        _state.update { it.copy(knockError = null) }
-    }
+    fun dismissKnockError() = _state.update { it.copy(knockError = null) }
+    fun dismissSyncError()  = _state.update { it.copy(syncError = null) }
 
     override fun onCleared() {
         super.onCleared()
@@ -162,7 +207,6 @@ class HomeViewModel @Inject constructor(
 
     private fun getLocalIpv4Address(): String =
         networkMonitor.getCurrentIpv4() ?: run {
-            // Fallback to iterating network interfaces
             try {
                 Collections.list(NetworkInterface.getNetworkInterfaces())
                     .flatMap { Collections.list(it.inetAddresses) }

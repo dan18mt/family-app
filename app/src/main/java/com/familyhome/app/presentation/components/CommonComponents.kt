@@ -3,6 +3,7 @@ package com.familyhome.app.presentation.components
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,10 +19,12 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.familyhome.app.presentation.theme.LowStockBackground
 import com.familyhome.app.presentation.theme.LowStockColor
 
@@ -111,23 +114,36 @@ fun ErrorScreen(
 fun AvatarInitials(
     name: String,
     modifier: Modifier = Modifier,
+    avatarUri: String? = null,
     containerColor: Color = MaterialTheme.colorScheme.primaryContainer,
     contentColor: Color   = MaterialTheme.colorScheme.onPrimaryContainer,
+    onClick: (() -> Unit)? = null,
 ) {
-    val initials = name.trim().split(" ")
-        .take(2)
-        .mapNotNull { it.firstOrNull()?.uppercaseChar() }
-        .joinToString("")
-
-    Box(
-        modifier         = modifier.clip(CircleShape).background(containerColor),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text  = initials,
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-            color = contentColor,
+    if (!avatarUri.isNullOrBlank()) {
+        AsyncImage(
+            model = avatarUri,
+            contentDescription = name,
+            contentScale = ContentScale.Crop,
+            modifier = modifier.clip(CircleShape)
+                .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
         )
+    } else {
+        val initials = name.trim().split(" ")
+            .take(2)
+            .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+            .joinToString("")
+
+        Box(
+            modifier = modifier.clip(CircleShape).background(containerColor)
+                .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text  = initials,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                color = contentColor,
+            )
+        }
     }
 }
 

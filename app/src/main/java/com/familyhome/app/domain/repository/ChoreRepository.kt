@@ -10,6 +10,7 @@ interface ChoreRepository {
     fun getChoreHistory(sinceTimestamp: Long): Flow<List<ChoreLog>>
     fun getChoreHistoryByUser(userId: String, sinceTimestamp: Long): Flow<List<ChoreLog>>
     suspend fun logChore(chore: ChoreLog)
+    suspend fun deleteChoreLog(id: String)
     suspend fun upsertAllLogs(logs: List<ChoreLog>)
 
     // Recurring tasks

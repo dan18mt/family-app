@@ -35,6 +35,7 @@ fun ChoresScreen(
     var showScheduleDialog by remember { mutableStateOf(false) }
     var assignTask         by remember { mutableStateOf<RecurringTask?>(null) }
     var respondAssignment  by remember { mutableStateOf<ChoreAssignment?>(null) }
+    var editTask           by remember { mutableStateOf<RecurringTask?>(null) }
     val snackbarHostState  = remember { SnackbarHostState() }
 
     LaunchedEffect(state.error) {
@@ -83,6 +84,14 @@ fun ChoresScreen(
             onDismiss  = { respondAssignment = null },
             onAccept   = { viewModel.acceptAssignment(assignment); respondAssignment = null },
             onDecline  = { reason -> viewModel.declineAssignment(assignment, reason); respondAssignment = null },
+        )
+    }
+
+    editTask?.let { task ->
+        EditTaskDialog(
+            task      = task,
+            onDismiss = { editTask = null },
+            onConfirm = { updated -> viewModel.updateTask(updated); editTask = null },
         )
     }
 
@@ -145,11 +154,14 @@ fun ChoresScreen(
                 }
                 items(state.recurringTasks, key = { it.id }) { task ->
                     RecurringTaskRow(
-                        task          = task,
-                        allUsers      = state.allUsers,
-                        canAssign     = state.currentUser?.role == Role.FATHER || state.currentUser?.role == Role.WIFE,
-                        onComplete    = { viewModel.completeTask(task) },
-                        onAssign      = { assignTask = task },
+                        task       = task,
+                        allUsers   = state.allUsers,
+                        canAssign  = state.currentUser?.role == Role.FATHER || state.currentUser?.role == Role.WIFE,
+                        canEdit    = state.currentUser?.role == Role.FATHER || state.currentUser?.role == Role.WIFE,
+                        onComplete = { viewModel.completeTask(task) },
+                        onAssign   = { assignTask = task },
+                        onEdit     = { editTask = task },
+                        onDelete   = { viewModel.deleteTask(task) },
                     )
                     HorizontalDivider()
                 }
@@ -182,7 +194,12 @@ fun ChoresScreen(
                 }
             } else {
                 items(state.history, key = { it.id }) { log ->
-                    ChoreLogRow(log = log, allUsers = state.allUsers)
+                    ChoreLogRow(
+                        log      = log,
+                        allUsers = state.allUsers,
+                        canEdit  = state.currentUser?.role == Role.FATHER || state.currentUser?.role == Role.WIFE,
+                        onDelete = { viewModel.deleteChoreLog(log) },
+                    )
                     HorizontalDivider()
                 }
             }
@@ -197,8 +214,11 @@ private fun RecurringTaskRow(
     task: RecurringTask,
     allUsers: List<User>,
     canAssign: Boolean,
+    canEdit: Boolean,
     onComplete: () -> Unit,
     onAssign: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     val fmt = SimpleDateFormat("EEE, dd MMM HH:mm", Locale.getDefault())
     val assigneeName = task.assignedTo?.let { id -> allUsers.find { it.id == id }?.name }
@@ -244,6 +264,14 @@ private fun RecurringTaskRow(
                             tint = MaterialTheme.colorScheme.secondary)
                     }
                 }
+                if (canEdit) {
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Default.Edit, "Edit task", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, "Delete task", tint = MaterialTheme.colorScheme.error)
+                    }
+                }
                 FilledTonalButton(onClick = onComplete) { Text("Done") }
             }
         },
@@ -251,7 +279,7 @@ private fun RecurringTaskRow(
 }
 
 @Composable
-private fun ChoreLogRow(log: ChoreLog, allUsers: List<User>) {
+private fun ChoreLogRow(log: ChoreLog, allUsers: List<User>, canEdit: Boolean, onDelete: () -> Unit) {
     val fmt = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
     val doerName = allUsers.find { it.id == log.doneBy }?.name ?: log.doneBy
     ListItem(
@@ -260,7 +288,19 @@ private fun ChoreLogRow(log: ChoreLog, allUsers: List<User>) {
             Text("${fmt.format(Date(log.doneAt))} · by $doerName")
         },
         leadingContent  = { Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary) },
-        trailingContent = log.note?.let { note -> { Text(note, style = MaterialTheme.typography.bodySmall) } },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (log.note != null) {
+                    Text(log.note, style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.width(4.dp))
+                }
+                if (canEdit) {
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, "Delete log", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+        },
     )
 }
 
@@ -406,6 +446,85 @@ private fun ScheduleChoreDialog(
                 val scheduledAt = parseDateTime(dateText, timeText)
                 onConfirm(taskName, frequency, assignTo, scheduledAt, reminderMin)
             }) { Text("Schedule") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditTaskDialog(
+    task: RecurringTask,
+    onDismiss: () -> Unit,
+    onConfirm: (RecurringTask) -> Unit,
+) {
+    var taskName     by remember { mutableStateOf(task.taskName) }
+    var frequency    by remember { mutableStateOf(task.frequency) }
+    var dateText     by remember { mutableStateOf(task.scheduledAt?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(it)) } ?: "") }
+    var timeText     by remember { mutableStateOf(task.scheduledAt?.let { SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it)) } ?: "") }
+    var reminderMin  by remember { mutableStateOf(task.reminderMinutesBefore) }
+    var freqExpanded by remember { mutableStateOf(false) }
+    var reminderExpanded by remember { mutableStateOf(false) }
+
+    val reminderOptions = listOf(null to "No reminder", 0 to "At the time",
+        1 to "1 min before", 5 to "5 min before", 15 to "15 min before", 30 to "30 min before")
+    val reminderLabel = reminderOptions.firstOrNull { it.first == reminderMin }?.second ?: "No reminder"
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit task") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = taskName, onValueChange = { taskName = it },
+                    label = { Text("Task name") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+                ExposedDropdownMenuBox(expanded = freqExpanded, onExpandedChange = { freqExpanded = it }) {
+                    OutlinedTextField(
+                        value = frequency.displayName, onValueChange = {}, readOnly = true,
+                        label = { Text("Frequency") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(freqExpanded) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(expanded = freqExpanded, onDismissRequest = { freqExpanded = false }) {
+                        Frequency.entries.forEach { f ->
+                            DropdownMenuItem(text = { Text(f.displayName) },
+                                onClick = { frequency = f; freqExpanded = false })
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = dateText, onValueChange = { dateText = it },
+                        label = { Text("Date (dd/MM/yyyy)") }, singleLine = true, modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = timeText, onValueChange = { timeText = it },
+                        label = { Text("Time (HH:mm)") }, singleLine = true, modifier = Modifier.weight(1f),
+                    )
+                }
+                ExposedDropdownMenuBox(expanded = reminderExpanded, onExpandedChange = { reminderExpanded = it }) {
+                    OutlinedTextField(
+                        value = reminderLabel, onValueChange = {}, readOnly = true,
+                        label = { Text("Reminder") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(reminderExpanded) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(expanded = reminderExpanded, onDismissRequest = { reminderExpanded = false }) {
+                        reminderOptions.forEach { (min, label) ->
+                            DropdownMenuItem(text = { Text(label) },
+                                onClick = { reminderMin = min; reminderExpanded = false })
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                if (taskName.isBlank()) return@Button
+                val scheduledAt = parseDateTime(dateText, timeText)
+                onConfirm(task.copy(taskName = taskName, frequency = frequency, scheduledAt = scheduledAt, reminderMinutesBefore = reminderMin))
+            }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

@@ -19,12 +19,16 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.familyhome.app.domain.model.CustomStockCategory
 import com.familyhome.app.domain.model.StockCategory
 import com.familyhome.app.domain.usecase.stock.AddStockItemUseCase
+import com.familyhome.app.domain.usecase.stock.GetCustomStockCategoriesUseCase
 import com.familyhome.app.domain.usecase.user.GetCurrentUserUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -41,14 +45,19 @@ data class AddStockUiState(
 class AddStockItemViewModel @Inject constructor(
     private val getCurrentUserUseCase: GetCurrentUserUseCase,
     private val addStockItemUseCase: AddStockItemUseCase,
+    private val getCustomStockCategoriesUseCase: GetCustomStockCategoriesUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(AddStockUiState())
     val state = _state.asStateFlow()
 
+    val customCategories = getCustomStockCategoriesUseCase()
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList<CustomStockCategory>())
+
     fun save(
         name: String,
         category: StockCategory,
+        customCategoryId: String?,
         quantity: Float,
         unit: String,
         minQuantity: Float,
@@ -63,7 +72,7 @@ class AddStockItemViewModel @Inject constructor(
                 _state.update { it.copy(isSaving = false, error = "Not logged in") }
                 return@launch
             }
-            val result = addStockItemUseCase(actor, name.trim(), category, quantity, unit.trim(), minQuantity)
+            val result = addStockItemUseCase(actor, name.trim(), category, quantity, unit.trim(), minQuantity, customCategoryId)
             result.fold(
                 onSuccess = { _state.update { it.copy(isSaving = false, saved = true) } },
                 onFailure = { e -> _state.update { it.copy(isSaving = false, error = e.message) } },
@@ -83,9 +92,9 @@ fun AddStockItemScreen(
     viewModel: AddStockItemViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val customCategories by viewModel.customCategories.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Navigate back once saved
     LaunchedEffect(state.saved) {
         if (state.saved) onBack()
     }
@@ -97,11 +106,12 @@ fun AddStockItemScreen(
         }
     }
 
-    var name        by remember { mutableStateOf("") }
-    var category    by remember { mutableStateOf(StockCategory.FOOD) }
-    var quantityStr by remember { mutableStateOf("1") }
-    var unit        by remember { mutableStateOf("pcs") }
-    var minQtyStr   by remember { mutableStateOf("1") }
+    var name           by remember { mutableStateOf("") }
+    var category       by remember { mutableStateOf(StockCategory.FOOD) }
+    var customCatId    by remember { mutableStateOf<String?>(null) }
+    var quantityStr    by remember { mutableStateOf("1") }
+    var unit           by remember { mutableStateOf("pcs") }
+    var minQtyStr      by remember { mutableStateOf("1") }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -122,11 +132,12 @@ fun AddStockItemScreen(
                     } else {
                         IconButton(onClick = {
                             viewModel.save(
-                                name        = name,
-                                category    = category,
-                                quantity    = quantityStr.toFloatOrNull() ?: 1f,
-                                unit        = unit,
-                                minQuantity = minQtyStr.toFloatOrNull() ?: 1f,
+                                name             = name,
+                                category         = category,
+                                customCategoryId = customCatId,
+                                quantity         = quantityStr.toFloatOrNull() ?: 1f,
+                                unit             = unit,
+                                minQuantity      = minQtyStr.toFloatOrNull() ?: 1f,
                             )
                         }) {
                             Icon(Icons.Default.Check, "Save")
@@ -155,14 +166,20 @@ fun AddStockItemScreen(
                 modifier      = Modifier.fillMaxWidth(),
             )
 
-            // Category chips
             Text("Category", style = MaterialTheme.typography.labelMedium)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(StockCategory.entries) { cat ->
                     FilterChip(
-                        selected = category == cat,
-                        onClick  = { category = cat },
+                        selected = category == cat && customCatId == null,
+                        onClick  = { category = cat; customCatId = null },
                         label    = { Text(cat.displayName) },
+                    )
+                }
+                items(customCategories) { cat ->
+                    FilterChip(
+                        selected = customCatId == cat.id,
+                        onClick  = { customCatId = cat.id },
+                        label    = { Text(cat.name) },
                     )
                 }
             }
@@ -200,17 +217,18 @@ fun AddStockItemScreen(
             Spacer(Modifier.height(16.dp))
 
             Button(
-                onClick   = {
+                onClick  = {
                     viewModel.save(
-                        name        = name,
-                        category    = category,
-                        quantity    = quantityStr.toFloatOrNull() ?: 1f,
-                        unit        = unit,
-                        minQuantity = minQtyStr.toFloatOrNull() ?: 1f,
+                        name             = name,
+                        category         = category,
+                        customCategoryId = customCatId,
+                        quantity         = quantityStr.toFloatOrNull() ?: 1f,
+                        unit             = unit,
+                        minQuantity      = minQtyStr.toFloatOrNull() ?: 1f,
                     )
                 },
-                modifier  = Modifier.fillMaxWidth(),
-                enabled   = !state.isSaving,
+                modifier = Modifier.fillMaxWidth(),
+                enabled  = !state.isSaving,
             ) {
                 Text("Add to Pantry")
             }

@@ -17,15 +17,15 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ChoresUiState(
-    val history: List<ChoreLog>                = emptyList(),
-    val recurringTasks: List<RecurringTask>    = emptyList(),
-    val pendingAssignments: List<ChoreAssignment> = emptyList(),
-    val allAssignments: List<ChoreAssignment>  = emptyList(),
-    val currentUser: User?                     = null,
-    val allUsers: List<User>                   = emptyList(),
-    val historyDays: Int                       = 7,
-    val isLoading: Boolean                     = true,
-    val error: String?                         = null,
+    val history: List<ChoreLog>                   = emptyList(),
+    val recurringTasks: List<RecurringTask>        = emptyList(),
+    val pendingAssignments: List<ChoreAssignment>  = emptyList(),
+    val allAssignments: List<ChoreAssignment>      = emptyList(),
+    val currentUser: User?                         = null,
+    val allUsers: List<User>                       = emptyList(),
+    val historyDays: Int                           = 7,
+    val isLoading: Boolean                         = true,
+    val error: String?                             = null,
 )
 
 @HiltViewModel
@@ -37,6 +37,9 @@ class ChoresViewModel @Inject constructor(
     private val getRecurringTasksUseCase: GetRecurringTasksUseCase,
     private val completeRecurringTaskUseCase: CompleteRecurringTaskUseCase,
     private val addRecurringTaskUseCase: AddRecurringTaskUseCase,
+    private val updateRecurringTaskUseCase: UpdateRecurringTaskUseCase,
+    private val deleteRecurringTaskUseCase: DeleteRecurringTaskUseCase,
+    private val deleteChoreLogUseCase: DeleteChoreLogUseCase,
     private val assignChoreUseCase: AssignChoreUseCase,
     private val respondToAssignmentUseCase: RespondToChoreAssignmentUseCase,
     private val getChoreAssignmentsUseCase: GetChoreAssignmentsUseCase,
@@ -52,7 +55,6 @@ class ChoresViewModel @Inject constructor(
             _state.update { it.copy(currentUser = user) }
             if (user != null) {
                 loadHistory(user, 7)
-                // Collect pending assignments for this user
                 getChoreAssignmentsUseCase.pendingForUser(user.id).collect { pending ->
                     _state.update { it.copy(pendingAssignments = pending) }
                 }
@@ -98,7 +100,6 @@ class ChoresViewModel @Inject constructor(
         val user = _state.value.currentUser ?: return
         viewModelScope.launch {
             completeRecurringTaskUseCase(user, task)
-            // Cancel any pending alarms for this task
             alarmScheduler.cancel(task.id)
         }
     }
@@ -122,13 +123,36 @@ class ChoresViewModel @Inject constructor(
             )
             result.fold(
                 onSuccess = { task ->
-                    // Schedule alarms if a specific time was set
                     if (task.scheduledAt != null && task.reminderMinutesBefore != null) {
                         alarmScheduler.schedule(task)
                     }
                 },
                 onFailure = { e -> _state.update { it.copy(error = e.message) } },
             )
+        }
+    }
+
+    fun updateTask(task: RecurringTask) {
+        val user = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            updateRecurringTaskUseCase(user, task)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+        }
+    }
+
+    fun deleteTask(task: RecurringTask) {
+        val user = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            deleteRecurringTaskUseCase(user, task)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+        }
+    }
+
+    fun deleteChoreLog(log: ChoreLog) {
+        val user = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            deleteChoreLogUseCase(user, log.id)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
         }
     }
 
