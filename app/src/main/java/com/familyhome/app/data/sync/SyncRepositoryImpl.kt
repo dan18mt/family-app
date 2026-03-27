@@ -5,11 +5,14 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.familyhome.app.data.mapper.*
+import com.familyhome.app.data.notification.AlarmScheduler
+import com.familyhome.app.data.notification.LowStockNotifier
 import com.familyhome.app.domain.model.CustomStockCategory
 import com.familyhome.app.domain.model.CustomStockCategoryDto
 import com.familyhome.app.domain.model.SyncPayload
 import com.familyhome.app.domain.model.SyncResult
 import com.familyhome.app.domain.repository.*
+import com.familyhome.app.domain.repository.SessionRepository
 import com.familyhome.app.util.dataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -29,6 +32,9 @@ class SyncRepositoryImpl @Inject constructor(
     private val expenseRepository: ExpenseRepository,
     private val budgetRepository: BudgetRepository,
     private val customStockCategoryRepository: CustomStockCategoryRepository,
+    private val alarmScheduler: AlarmScheduler,
+    private val sessionRepository: SessionRepository,
+    private val lowStockNotifier: LowStockNotifier,
 ) {
     private val lastSyncKey = longPreferencesKey("last_sync_time")
     private val hostIpKey   = stringPreferencesKey("sync_host_ip")
@@ -104,6 +110,28 @@ class SyncRepositoryImpl @Inject constructor(
             customStockCategoryRepository.upsertAll(
                 it.map { dto -> CustomStockCategory(dto.id, dto.name, dto.iconName) }
             )
+        }
+
+        payload.recurringTasks?.let { dtos ->
+            val currentUserId = sessionRepository.getCurrentUserId()
+            if (currentUserId != null) {
+                val now = System.currentTimeMillis()
+                dtos.forEach { dto ->
+                    val task = dto.toDomain()
+                    if (task.assignedTo == currentUserId &&
+                        task.scheduledAt != null &&
+                        task.scheduledAt > now &&
+                        task.reminderMinutesBefore != null) {
+                        alarmScheduler.schedule(task)
+                    }
+                }
+            }
+        }
+
+        payload.stockItems?.let { dtos ->
+            dtos.map { it.toDomain() }.forEach { item ->
+                lowStockNotifier.notifyIfLow(item)
+            }
         }
     }
 }

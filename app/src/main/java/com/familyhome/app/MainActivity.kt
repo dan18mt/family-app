@@ -22,6 +22,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
 import com.familyhome.app.data.notification.AlarmScheduler
+import com.familyhome.app.data.service.FamilyBackgroundService
 import com.familyhome.app.domain.repository.SessionRepository
 import com.familyhome.app.domain.repository.UserRepository
 import com.familyhome.app.presentation.navigation.AppNavGraph
@@ -52,6 +53,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        FamilyBackgroundService.start(this)
         enableEdgeToEdge()
 
         // Request POST_NOTIFICATIONS on Android 13+

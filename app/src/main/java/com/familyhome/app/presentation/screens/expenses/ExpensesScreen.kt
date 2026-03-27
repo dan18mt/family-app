@@ -13,8 +13,6 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
@@ -49,6 +47,16 @@ val CATEGORY_ICON_OPTIONS: List<Pair<String, ImageVector>> = listOf(
 
 fun iconVectorForName(name: String): ImageVector =
     CATEGORY_ICON_OPTIONS.firstOrNull { it.first == name }?.second ?: Icons.Default.Category
+
+fun expenseCategoryIcon(cat: ExpenseCategory): ImageVector = when (cat) {
+    ExpenseCategory.GROCERIES     -> Icons.Default.ShoppingCart
+    ExpenseCategory.TRANSPORT     -> Icons.Default.DirectionsCar
+    ExpenseCategory.SCHOOL        -> Icons.Default.School
+    ExpenseCategory.HEALTH        -> Icons.Default.HealthAndSafety
+    ExpenseCategory.ENTERTAINMENT -> Icons.Default.Movie
+    ExpenseCategory.HOUSEHOLD     -> Icons.Default.Home
+    ExpenseCategory.OTHER         -> Icons.Default.Category
+}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -243,7 +251,6 @@ private fun ExpenseChartCard(
         .mapValues { (_, v) -> v.sumOf { it.amount } }
         .entries.sortedByDescending { it.value }.take(6)
 
-    val maxAmount = byCategory.maxOfOrNull { it.value } ?: 1L
     val barColors = listOf(
         Color(0xFF4CAF50), Color(0xFF2196F3), Color(0xFFFF9800),
         Color(0xFFE91E63), Color(0xFF9C27B0), Color(0xFF00BCD4),
@@ -299,23 +306,23 @@ private fun ExpenseChartCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    val barWidth   = size.width / (byCategory.size * 2f)
-                    val chartH     = size.height - 20f
-                    byCategory.forEachIndexed { i, (cat, amount) ->
-                        val barH   = (amount.toFloat() / maxAmount.toFloat()) * chartH
-                        val left   = i * barWidth * 2f + barWidth / 2f
-                        val top    = chartH - barH
-                        val color  = barColors[i % barColors.size]
-                        drawRect(
-                            color   = color,
-                            topLeft = Offset(left, top),
-                            size    = Size(barWidth, barH),
-                        )
+                    val total = byCategory.sumOf { it.value }.toFloat()
+                    Canvas(modifier = Modifier.size(160.dp)) {
+                        var startAngle = -90f
+                        byCategory.forEachIndexed { i, (_, amount) ->
+                            val sweep = (amount.toFloat() / total) * 360f
+                            drawArc(
+                                color      = barColors[i % barColors.size],
+                                startAngle = startAngle,
+                                sweepAngle = sweep - 1f,
+                                useCenter  = true,
+                            )
+                            startAngle += sweep
+                        }
                     }
                 }
 
@@ -337,6 +344,13 @@ private fun ExpenseChartCard(
                                     drawRect(barColors[i % barColors.size])
                                 }
                             }
+                            Icon(
+                                expenseCategoryIcon(cat),
+                                null,
+                                modifier = Modifier.size(12.dp).padding(start = 2.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(2.dp))
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 cat.displayName,
@@ -391,7 +405,9 @@ private fun ExpenseRow(
     val categoryIcon = if (expense.customCategoryId != null) {
         val iconName = customCategories.find { it.id == expense.customCategoryId }?.iconName ?: "Category"
         iconVectorForName(iconName)
-    } else Icons.Default.Receipt
+    } else {
+        expenseCategoryIcon(expense.category)
+    }
 
     val showPayer = currentUser?.role == Role.FATHER ||
         (currentUser?.role == Role.WIFE && expense.paidBy != currentUser.id)
@@ -476,8 +492,9 @@ private fun AddExpenseDialog(
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                         ExpenseCategory.entries.forEach { cat ->
                             DropdownMenuItem(
-                                text = { Text(cat.displayName) },
-                                onClick = { builtInCat = cat; customCatId = null; expanded = false },
+                                text        = { Text(cat.displayName) },
+                                leadingIcon = { Icon(expenseCategoryIcon(cat), null, Modifier.size(18.dp)) },
+                                onClick     = { builtInCat = cat; customCatId = null; expanded = false },
                             )
                         }
                         if (customCategories.isNotEmpty()) {
@@ -549,8 +566,9 @@ private fun EditExpenseDialog(
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                         ExpenseCategory.entries.forEach { cat ->
                             DropdownMenuItem(
-                                text = { Text(cat.displayName) },
-                                onClick = { builtInCat = cat; customCatId = null; expanded = false },
+                                text        = { Text(cat.displayName) },
+                                leadingIcon = { Icon(expenseCategoryIcon(cat), null, Modifier.size(18.dp)) },
+                                onClick     = { builtInCat = cat; customCatId = null; expanded = false },
                             )
                         }
                         if (customCategories.isNotEmpty()) {
@@ -757,7 +775,13 @@ private fun ManageBudgetsDialog(
                         }
                         ListItem(
                             headlineContent   = {
-                                Text("${budget.category?.displayName ?: "Overall"} · $targetName")
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    budget.category?.let { cat ->
+                                        Icon(expenseCategoryIcon(cat), null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                    }
+                                    Text("${budget.category?.displayName ?: "Overall"} · $targetName")
+                                }
                             },
                             supportingContent = {
                                 Text("${currFmt.format(budget.limitAmount / 100.0)} / ${budget.period.displayName}")
@@ -822,8 +846,11 @@ private fun AddBudgetForm(
                         DropdownMenuItem(text = { Text("All categories") },
                             onClick = { category = null; catExpanded = false })
                         ExpenseCategory.entries.forEach { cat ->
-                            DropdownMenuItem(text = { Text(cat.displayName) },
-                                onClick = { category = cat; catExpanded = false })
+                            DropdownMenuItem(
+                                text        = { Text(cat.displayName) },
+                                leadingIcon = { Icon(expenseCategoryIcon(cat), null, Modifier.size(18.dp)) },
+                                onClick     = { category = cat; catExpanded = false }
+                            )
                         }
                     }
                 }

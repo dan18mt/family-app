@@ -9,6 +9,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -32,6 +34,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+private val COMMON_UNITS = listOf("pcs", "kg", "g", "L", "mL", "pack", "box", "bottle", "can", "bag", "roll", "sheet")
 
 // ── ViewModel ─────────────────────────────────────────────────────────────────
 
@@ -111,6 +115,8 @@ fun AddStockItemScreen(
     var customCatId    by remember { mutableStateOf<String?>(null) }
     var quantityStr    by remember { mutableStateOf("1") }
     var unit           by remember { mutableStateOf("pcs") }
+    var unitExpanded   by remember { mutableStateOf(false) }
+    var customUnitMode by remember { mutableStateOf(false) }
     var minQtyStr      by remember { mutableStateOf("1") }
 
     Scaffold(
@@ -193,15 +199,52 @@ fun AddStockItemScreen(
                     singleLine      = true,
                     modifier        = Modifier.weight(1f),
                 )
-                OutlinedTextField(
-                    value           = unit,
-                    onValueChange   = { unit = it },
-                    label           = { Text("Unit") },
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None),
-                    singleLine      = true,
-                    modifier        = Modifier.weight(1f),
-                    placeholder     = { Text("pcs / kg / L") },
-                )
+                if (customUnitMode) {
+                    OutlinedTextField(
+                        value           = unit,
+                        onValueChange   = { unit = it },
+                        label           = { Text("Unit") },
+                        singleLine      = true,
+                        modifier        = Modifier.weight(1f),
+                        trailingIcon    = {
+                            IconButton(onClick = { customUnitMode = false; unit = COMMON_UNITS.first() }) {
+                                Icon(Icons.Default.Close, "Back to list")
+                            }
+                        },
+                    )
+                } else {
+                    ExposedDropdownMenuBox(
+                        expanded         = unitExpanded,
+                        onExpandedChange = { unitExpanded = it },
+                        modifier         = Modifier.weight(1f),
+                    ) {
+                        OutlinedTextField(
+                            value         = unit,
+                            onValueChange = {},
+                            readOnly      = true,
+                            label         = { Text("Unit") },
+                            trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(unitExpanded) },
+                            modifier      = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                        )
+                        ExposedDropdownMenu(
+                            expanded         = unitExpanded,
+                            onDismissRequest = { unitExpanded = false },
+                        ) {
+                            COMMON_UNITS.forEach { u ->
+                                DropdownMenuItem(
+                                    text    = { Text(u) },
+                                    onClick = { unit = u; unitExpanded = false },
+                                )
+                            }
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text        = { Text("Custom…") },
+                                leadingIcon = { Icon(Icons.Default.Edit, null, Modifier.size(18.dp)) },
+                                onClick     = { customUnitMode = true; unitExpanded = false; unit = "" },
+                            )
+                        }
+                    }
+                }
             }
 
             OutlinedTextField(

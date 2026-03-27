@@ -10,6 +10,18 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.familyhome.app.MainActivity
 import com.familyhome.app.R
+import com.familyhome.app.domain.repository.SessionRepository
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.runBlocking
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface AlarmReceiverEntryPoint {
+    fun sessionRepository(): SessionRepository
+}
 
 /**
  * Receives AlarmManager broadcasts for chore reminders and overdue checks.
@@ -37,6 +49,16 @@ class ChoreAlarmReceiver : BroadcastReceiver() {
         val taskId   = intent.getStringExtra(EXTRA_TASK_ID) ?: return
         val taskName = intent.getStringExtra(EXTRA_TASK_NAME) ?: "Chore"
         val isOverdue = intent.getBooleanExtra(EXTRA_IS_OVERDUE, false)
+
+        val assignedTo = intent.getStringExtra(AlarmScheduler.EXTRA_ASSIGNED_TO)
+        if (assignedTo != null) {
+            val ep = EntryPointAccessors.fromApplication(
+                context.applicationContext,
+                AlarmReceiverEntryPoint::class.java,
+            )
+            val currentUserId = runBlocking { ep.sessionRepository().getCurrentUserId() }
+            if (currentUserId != assignedTo) return
+        }
 
         ensureChannels(context)
 

@@ -21,6 +21,7 @@ class AlarmScheduler @Inject constructor(
         const val EXTRA_TASK_ID   = "task_id"
         const val EXTRA_TASK_NAME = "task_name"
         const val EXTRA_IS_OVERDUE = "is_overdue"
+        const val EXTRA_ASSIGNED_TO = "assigned_to"
 
         /** RequestCode = positive int derived from taskId hash for reminder alarms. */
         private fun reminderRequestCode(taskId: String) = taskId.hashCode() and 0x7FFFFFFF
@@ -57,6 +58,7 @@ class AlarmScheduler @Inject constructor(
                 taskId          = task.id,
                 taskName        = task.taskName,
                 isOverdue       = false,
+                assignedTo      = task.assignedTo,
             )
             Log.d(TAG, "Reminder alarm set for '${task.taskName}' at $reminderTime")
         }
@@ -70,6 +72,7 @@ class AlarmScheduler @Inject constructor(
                 taskId          = task.id,
                 taskName        = task.taskName,
                 isOverdue       = true,
+                assignedTo      = task.assignedTo,
             )
             Log.d(TAG, "Overdue check alarm set for '${task.taskName}' at $overdueTime")
         }
@@ -88,11 +91,13 @@ class AlarmScheduler @Inject constructor(
         taskId: String,
         taskName: String,
         isOverdue: Boolean,
+        assignedTo: String? = null,
     ) {
         val intent = Intent(context, ChoreAlarmReceiver::class.java).apply {
             putExtra(EXTRA_TASK_ID, taskId)
             putExtra(EXTRA_TASK_NAME, taskName)
             putExtra(EXTRA_IS_OVERDUE, isOverdue)
+            putExtra(EXTRA_ASSIGNED_TO, assignedTo)
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,
@@ -116,6 +121,7 @@ class AlarmScheduler @Inject constructor(
     private fun cancel(requestCode: Int, taskId: String) {
         val intent = Intent(context, ChoreAlarmReceiver::class.java).apply {
             putExtra(EXTRA_TASK_ID, taskId)
+            putExtra(EXTRA_ASSIGNED_TO, null as String?)
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,

@@ -10,6 +10,7 @@ enum class NotificationType {
     CHORE_REMINDER,
     CHORE_OVERDUE,
     EXPENSE_ADDED,
+    LOW_STOCK,
     GENERAL,
 }
 

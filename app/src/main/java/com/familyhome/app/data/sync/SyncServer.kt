@@ -1,6 +1,7 @@
 package com.familyhome.app.data.sync
 
 import com.familyhome.app.data.mapper.*
+import com.familyhome.app.data.notification.LowStockNotifier
 import com.familyhome.app.data.notification.NotificationCenter
 import com.familyhome.app.data.onboarding.ApprovalStatusDto
 import com.familyhome.app.data.onboarding.FamilyInfoDto
@@ -47,6 +48,7 @@ class SyncServer @Inject constructor(
     private val customStockCategoryRepository: CustomStockCategoryRepository,
     private val onboardingState: OnboardingState,
     private val notificationCenter: NotificationCenter,
+    private val lowStockNotifier: LowStockNotifier,
 ) {
     private var server: ApplicationEngine? = null
 
@@ -119,6 +121,11 @@ class SyncServer @Inject constructor(
                 message  = "${expense.description} — ${expense.category.lowercase().replaceFirstChar { it.uppercase() }}",
                 sourceId = "expense_${expense.id}",
             ))
+        }
+        payload.stockItems?.let { dtos ->
+            dtos.map { it.toDomain() }.forEach { item ->
+                lowStockNotifier.notifyIfLow(item)
+            }
         }
     }
 

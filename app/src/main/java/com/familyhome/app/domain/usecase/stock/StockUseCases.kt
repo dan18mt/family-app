@@ -1,5 +1,6 @@
 package com.familyhome.app.domain.usecase.stock
 
+import com.familyhome.app.data.notification.LowStockNotifier
 import com.familyhome.app.domain.model.StockCategory
 import com.familyhome.app.domain.model.StockItem
 import com.familyhome.app.domain.model.User
@@ -55,6 +56,7 @@ class AddStockItemUseCase @Inject constructor(
 
 class UpdateStockQuantityUseCase @Inject constructor(
     private val stockRepository: StockRepository,
+    private val lowStockNotifier: LowStockNotifier,
 ) {
     suspend operator fun invoke(actor: User, itemId: String, newQuantity: Float): Result<Unit> {
         if (!PermissionManager.canUpdateStockQuantity(actor)) {
@@ -63,13 +65,13 @@ class UpdateStockQuantityUseCase @Inject constructor(
         val item = stockRepository.getItemById(itemId)
             ?: return Result.failure(NoSuchElementException("Stock item not found."))
 
-        stockRepository.updateItem(
-            item.copy(
-                quantity  = newQuantity,
-                updatedBy = actor.id,
-                updatedAt = System.currentTimeMillis(),
-            )
+        val updated = item.copy(
+            quantity  = newQuantity,
+            updatedBy = actor.id,
+            updatedAt = System.currentTimeMillis(),
         )
+        stockRepository.updateItem(updated)
+        lowStockNotifier.notifyIfLow(updated)
         return Result.success(Unit)
     }
 }

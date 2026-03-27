@@ -8,7 +8,6 @@ import com.familyhome.app.data.onboarding.InviteDto
 import com.familyhome.app.data.onboarding.JoinRequestDto
 import com.familyhome.app.data.onboarding.KnockDto
 import com.familyhome.app.data.onboarding.NetworkMonitor
-import com.familyhome.app.data.onboarding.NsdHelper
 import com.familyhome.app.data.onboarding.OnboardingClient
 import com.familyhome.app.data.onboarding.OnboardingState
 import com.familyhome.app.data.sync.SyncRepositoryImpl
@@ -23,7 +22,6 @@ import com.familyhome.app.domain.usecase.user.GetCurrentUserUseCase
 import com.familyhome.app.domain.usecase.user.GetFamilyMembersUseCase
 import com.familyhome.app.domain.usecase.user.UpdateProfileUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.net.Inet4Address
@@ -47,8 +45,6 @@ data class HomeUiState(
     val unreadNotificationCount: Int = 0,
 )
 
-private const val AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
-
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val getCurrentUserUseCase: GetCurrentUserUseCase,
@@ -57,7 +53,6 @@ class HomeViewModel @Inject constructor(
     private val checkBudgetAlertUseCase: CheckBudgetAlertUseCase,
     private val syncRepository: SyncRepositoryImpl,
     private val syncServer: SyncServer,
-    private val nsdHelper: NsdHelper,
     private val onboardingClient: OnboardingClient,
     private val onboardingState: OnboardingState,
     private val notificationCenter: NotificationCenter,
@@ -78,17 +73,6 @@ class HomeViewModel @Inject constructor(
             _state.update { it.copy(currentUser = currentUser) }
 
             if (currentUser != null) {
-                if (currentUser.role == Role.FATHER) {
-                    syncRepository.startHostServer()
-                    nsdHelper.startAdvertising(
-                        serviceName = "FamilyHome_Host",
-                        port        = 8765,
-                        serviceType = NsdHelper.FATHER_SERVICE_TYPE,
-                    )
-                } else {
-                    // Start periodic auto-sync for non-Father members
-                    startAutoSync()
-                }
                 val alerts = checkBudgetAlertUseCase(currentUser.id)
                 _state.update { it.copy(budgetAlerts = alerts) }
             }
@@ -127,15 +111,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             syncRepository.getLastSyncTimeFlow().collect { ts ->
                 _state.update { it.copy(lastSyncAt = ts) }
-            }
-        }
-    }
-
-    private fun startAutoSync() {
-        viewModelScope.launch {
-            while (true) {
-                delay(AUTO_SYNC_INTERVAL_MS)
-                performSync()
             }
         }
     }
@@ -202,7 +177,6 @@ class HomeViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        nsdHelper.stopAdvertising()
     }
 
     private fun getLocalIpv4Address(): String =

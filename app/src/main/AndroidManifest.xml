@@ -27,6 +27,10 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Foreground service for background sync and networking -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
     <application
         android:name=".FamilyHomeApplication"
         android:allowBackup="true"
@@ -67,6 +71,22 @@
             <intent-filter>
                 <action android:name="com.familyhome.app.CHORE_DONE" />
                 <action android:name="com.familyhome.app.CHORE_REMIND_LATER" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Background service for networking, sync, and NSD discovery -->
+        <service
+            android:name=".data.service.FamilyBackgroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- Restarts background service after device reboot -->
+        <receiver
+            android:name=".data.service.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
 
