@@ -75,6 +75,7 @@ class HomeViewModel @Inject constructor(
 
     init {
         loadData()
+        startNsdForRole()
         startAutoLoops()
     }
 
@@ -131,46 +132,88 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    /** Auto-sync every 15 s (members only) and re-scan host every 30 s. */
-    private fun startAutoLoops() {
-        // Sync loop — 15 s
+    /**
+     * Start NSD based on role:
+     *  - Father  → ensure the Ktor server is running and re-advertise via NSD so members
+     *              can always discover the current host IP (survives app restarts + IP changes).
+     *  - Member  → browse for Father's NSD service; whenever a host is (re)discovered,
+     *              persist its IP and trigger a sync immediately.
+     */
+    private fun startNsdForRole() {
         viewModelScope.launch {
-            delay(15_000)
-            while (true) {
-                val user = _state.value.currentUser
-                if (user != null && user.role != Role.FATHER && !_state.value.isSyncing) {
-                    performSync()
-                }
-                delay(15_000)
+            val user = getCurrentUserUseCase() ?: return@launch
+            if (user.role == Role.FATHER) {
+                // Idempotent: server has `if (isRunning) return` guard
+                syncRepository.startHostServer()
+                nsdHelper.startAdvertising("FamilyHome_Host", 8765, NsdHelper.FATHER_SERVICE_TYPE)
+            } else {
+                // Start continuous discovery; NsdHelper will re-browse on network reconnect
+                // automatically via its NetworkMonitor callback.
+                nsdHelper.startBrowsing(NsdHelper.FATHER_SERVICE_TYPE)
+
+                // Whenever the Father service is (re)discovered, update the stored host IP
+                // and sync immediately — this is the primary reconnect mechanism.
+                nsdHelper.discoveredDevices
+                    .filter { it.isNotEmpty() }
+                    .collect { devices ->
+                        val host = devices.first()
+                        val storedIp = syncRepository.getHostIpFlow().first()
+                        if (host.hostAddress != storedIp) {
+                            Log.d("HomeViewModel", "Host IP updated: $storedIp → ${host.hostAddress}")
+                            syncRepository.saveHostIp(host.hostAddress)
+                        }
+                        if (!_state.value.isSyncing) performSync(isManual = false)
+                    }
             }
         }
-        // Reconnect / re-scan loop — 30 s
+    }
+
+    /** Auto-sync every 15 s (members only, silent) + NSD safety-net re-browse every 60 s. */
+    private fun startAutoLoops() {
+        // Periodic sync — 15 s, background, errors suppressed
         viewModelScope.launch {
-            delay(30_000)
             while (true) {
+                delay(15_000)
                 val user = _state.value.currentUser
-                if (user != null && user.role != Role.FATHER) {
-                    val reachable = syncRepository.ping()
-                    if (!reachable) {
-                        // Host unreachable — trigger a fresh NSD browse to re-discover the host IP
-                        nsdHelper.startBrowsing(NsdHelper.FATHER_SERVICE_TYPE)
-                    }
+                if (user != null && user.role != Role.FATHER && !_state.value.isSyncing) {
+                    performSync(isManual = false)
                 }
-                delay(30_000)
+            }
+        }
+        // NSD safety-net: restart browsing every 60 s in case the OS silently killed it
+        viewModelScope.launch {
+            while (true) {
+                delay(60_000)
+                val user = _state.value.currentUser
+                if (user != null && user.role != Role.FATHER && networkMonitor.isWifiConnected.value) {
+                    nsdHelper.startBrowsing(NsdHelper.FATHER_SERVICE_TYPE)
+                }
             }
         }
     }
 
     fun manualSync() {
         if (_state.value.isSyncing) return
-        viewModelScope.launch { performSync() }
+        viewModelScope.launch { performSync(isManual = true) }
     }
 
-    private suspend fun performSync() {
+    /**
+     * Run a sync cycle.
+     * [isManual] = true  → always surface errors to the user (button tap).
+     * [isManual] = false → silent: no snackbar on failure, no error when offline.
+     *                      The next auto or NSD-triggered attempt will retry.
+     */
+    private suspend fun performSync(isManual: Boolean = false) {
+        if (!networkMonitor.isWifiConnected.value) {
+            if (isManual) _state.update { it.copy(syncError = "Not connected to Wi-Fi.") }
+            return
+        }
         _state.update { it.copy(isSyncing = true, syncError = null) }
         when (val result = syncRepository.syncWithHost()) {
             is SyncResult.Success -> _state.update { it.copy(isSyncing = false, lastSyncAt = result.syncedAt) }
-            is SyncResult.Error   -> _state.update { it.copy(isSyncing = false, syncError = result.message) }
+            is SyncResult.Error   -> _state.update {
+                it.copy(isSyncing = false, syncError = if (isManual) result.message else null)
+            }
         }
     }
 
