@@ -166,6 +166,7 @@ fun ExpensesScreen(
             item {
                 ExpenseChartCard(
                     expenses         = state.expenses,
+                    customCategories = state.customCategories,
                     allUsers         = state.allUsers,
                     currentUser      = state.currentUser,
                     selectedPeriod   = state.selectedChartPeriod,
@@ -221,9 +222,12 @@ fun ExpensesScreen(
 
 // ── Expense chart card ────────────────────────────────────────────────────────
 
+private data class ChartEntry(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val amount: Long)
+
 @Composable
 private fun ExpenseChartCard(
     expenses: List<Expense>,
+    customCategories: List<CustomExpenseCategory>,
     allUsers: List<User>,
     currentUser: User?,
     selectedPeriod: ChartPeriod,
@@ -247,9 +251,27 @@ private fun ExpenseChartCard(
         expense.expenseDate >= cutoff
     }
 
-    val byCategory = filteredExpenses.groupBy { it.category }
-        .mapValues { (_, v) -> v.sumOf { it.amount } }
-        .entries.sortedByDescending { it.value }.take(6)
+    // Group by custom-category ID if set, otherwise by built-in enum name.
+    // This ensures custom categories each get their own slice instead of
+    // being merged under their parent built-in category (e.g. "Other").
+    val byCategory: List<ChartEntry> = filteredExpenses
+        .groupBy { expense -> expense.customCategoryId ?: expense.category.name }
+        .map { (key, group) ->
+            val first = group.first()
+            val label: String
+            val icon: androidx.compose.ui.graphics.vector.ImageVector
+            if (first.customCategoryId != null) {
+                val cat = customCategories.find { it.id == first.customCategoryId }
+                label = cat?.name ?: first.category.displayName
+                icon  = iconVectorForName(cat?.iconName ?: "Category")
+            } else {
+                label = first.category.displayName
+                icon  = expenseCategoryIcon(first.category)
+            }
+            ChartEntry(label, icon, group.sumOf { it.amount })
+        }
+        .sortedByDescending { it.amount }
+        .take(6)
 
     val barColors = listOf(
         Color(0xFF4CAF50), Color(0xFF2196F3), Color(0xFFFF9800),
@@ -310,11 +332,11 @@ private fun ExpenseChartCard(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    val total = byCategory.sumOf { it.value }.toFloat()
+                    val total = byCategory.sumOf { it.amount }.toFloat()
                     Canvas(modifier = Modifier.size(160.dp)) {
                         var startAngle = -90f
-                        byCategory.forEachIndexed { i, (_, amount) ->
-                            val sweep = (amount.toFloat() / total) * 360f
+                        byCategory.forEachIndexed { i, entry ->
+                            val sweep = (entry.amount.toFloat() / total) * 360f
                             drawArc(
                                 color      = barColors[i % barColors.size],
                                 startAngle = startAngle,
@@ -330,37 +352,32 @@ private fun ExpenseChartCard(
 
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     val currFmt = NumberFormat.getCurrencyInstance(Locale("id", "ID"))
-                    byCategory.forEachIndexed { i, (cat, amount) ->
+                    byCategory.forEachIndexed { i, entry ->
                         Row(
                             modifier          = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(12.dp)
-                                    .then(Modifier),
-                            ) {
+                            Box(modifier = Modifier.size(12.dp)) {
                                 Canvas(modifier = Modifier.fillMaxSize()) {
                                     drawRect(barColors[i % barColors.size])
                                 }
                             }
+                            Spacer(Modifier.width(4.dp))
                             Icon(
-                                expenseCategoryIcon(cat),
-                                null,
-                                modifier = Modifier.size(12.dp).padding(start = 2.dp),
+                                entry.icon, null,
+                                modifier = Modifier.size(12.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            Spacer(Modifier.width(2.dp))
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                cat.displayName,
+                                entry.label,
                                 style    = MaterialTheme.typography.labelSmall,
                                 modifier = Modifier.weight(1f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                currFmt.format(amount / 100.0),
+                                currFmt.format(entry.amount / 100.0),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

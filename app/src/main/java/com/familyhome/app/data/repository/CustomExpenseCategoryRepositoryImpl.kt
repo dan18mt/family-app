@@ -24,4 +24,7 @@ class CustomExpenseCategoryRepositoryImpl @Inject constructor(
 
     override suspend fun deleteCategory(id: String) =
         dao.deleteCategory(id)
+
+    override suspend fun upsertAll(categories: List<CustomExpenseCategory>) =
+        dao.upsertAll(categories.map { it.toEntity() })
 }

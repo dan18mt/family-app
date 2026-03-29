@@ -1,5 +1,6 @@
 package com.familyhome.app.presentation.screens.chores
 
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,6 +24,7 @@ import com.familyhome.app.domain.model.User
 import com.familyhome.app.presentation.components.LoadingScreen
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.Calendar as Cal
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -352,19 +354,51 @@ private fun ScheduleChoreDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, Frequency, String?, Long?, Int?) -> Unit,
 ) {
-    var taskName    by remember { mutableStateOf("") }
-    var frequency   by remember { mutableStateOf(Frequency.CUSTOM) }
-    var assignTo    by remember { mutableStateOf<String?>(null) }
-    var dateText    by remember { mutableStateOf("") }
-    var timeText    by remember { mutableStateOf("") }
-    var reminderMin by remember { mutableStateOf<Int?>(null) }
-    var freqExpanded  by remember { mutableStateOf(false) }
-    var assignExpanded by remember { mutableStateOf(false) }
+    var taskName         by remember { mutableStateOf("") }
+    var frequency        by remember { mutableStateOf(Frequency.CUSTOM) }
+    var assignTo         by remember { mutableStateOf<String?>(null) }
+    var reminderMin      by remember { mutableStateOf<Int?>(null) }
+    var freqExpanded     by remember { mutableStateOf(false) }
+    var assignExpanded   by remember { mutableStateOf(false) }
     var reminderExpanded by remember { mutableStateOf(false) }
+    var showDatePicker   by remember { mutableStateOf(false) }
+    var showTimePicker   by remember { mutableStateOf(false) }
+
+    val datePickerState   = rememberDatePickerState()
+    val timePickerState   = rememberTimePickerState(is24Hour = true)
+    val dateInteraction   = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val timeInteraction   = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val datePressed by dateInteraction.collectIsPressedAsState()
+    val timePressed by timeInteraction.collectIsPressedAsState()
+
+    LaunchedEffect(datePressed) { if (datePressed) showDatePicker = true }
+    LaunchedEffect(timePressed) { if (timePressed) showTimePicker = true }
+
+    val dateLabel = datePickerState.selectedDateMillis?.let {
+        SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(it))
+    } ?: "Pick date"
+    val timeLabel = "%02d:%02d".format(timePickerState.hour, timePickerState.minute)
 
     val reminderOptions = listOf(null to "No reminder", 0 to "At the time",
         1 to "1 min before", 5 to "5 min before", 15 to "15 min before", 30 to "30 min before")
     val reminderLabel = reminderOptions.firstOrNull { it.first == reminderMin }?.second ?: "No reminder"
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = { TextButton(onClick = { showDatePicker = false }) { Text("OK") } },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } },
+        ) { DatePicker(state = datePickerState) }
+    }
+
+    if (showTimePicker) {
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = { TextButton(onClick = { showTimePicker = false }) { Text("OK") } },
+            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancel") } },
+            text = { TimePicker(state = timePickerState) },
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -376,7 +410,6 @@ private fun ScheduleChoreDialog(
                     label = { Text("Task name") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                // Frequency
                 ExposedDropdownMenuBox(expanded = freqExpanded, onExpandedChange = { freqExpanded = it }) {
                     OutlinedTextField(
                         value = frequency.displayName, onValueChange = {}, readOnly = true,
@@ -391,20 +424,22 @@ private fun ScheduleChoreDialog(
                         }
                     }
                 }
-                // Date + time
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = dateText, onValueChange = { dateText = it },
-                        label = { Text("Date (dd/MM/yyyy)") }, singleLine = true,
+                        value = dateLabel, onValueChange = {}, readOnly = true,
+                        label = { Text("Date") }, singleLine = true,
+                        trailingIcon = { Icon(Icons.Default.CalendarMonth, null) },
                         modifier = Modifier.weight(1f),
+                        interactionSource = dateInteraction,
                     )
                     OutlinedTextField(
-                        value = timeText, onValueChange = { timeText = it },
-                        label = { Text("Time (HH:mm)") }, singleLine = true,
+                        value = timeLabel, onValueChange = {}, readOnly = true,
+                        label = { Text("Time") }, singleLine = true,
+                        trailingIcon = { Icon(Icons.Default.Schedule, null) },
                         modifier = Modifier.weight(1f),
+                        interactionSource = timeInteraction,
                     )
                 }
-                // Reminder
                 ExposedDropdownMenuBox(expanded = reminderExpanded, onExpandedChange = { reminderExpanded = it }) {
                     OutlinedTextField(
                         value = reminderLabel, onValueChange = {}, readOnly = true,
@@ -419,7 +454,6 @@ private fun ScheduleChoreDialog(
                         }
                     }
                 }
-                // Assign to (optional)
                 if (familyMembers.isNotEmpty()) {
                     val assignLabel = familyMembers.find { it.id == assignTo }?.name ?: "Anyone"
                     ExposedDropdownMenuBox(expanded = assignExpanded, onExpandedChange = { assignExpanded = it }) {
@@ -443,7 +477,7 @@ private fun ScheduleChoreDialog(
         confirmButton = {
             Button(onClick = {
                 if (taskName.isBlank()) return@Button
-                val scheduledAt = parseDateTime(dateText, timeText)
+                val scheduledAt = buildScheduledAt(datePickerState.selectedDateMillis, timePickerState.hour, timePickerState.minute)
                 onConfirm(taskName, frequency, assignTo, scheduledAt, reminderMin)
             }) { Text("Schedule") }
         },
@@ -458,17 +492,56 @@ private fun EditTaskDialog(
     onDismiss: () -> Unit,
     onConfirm: (RecurringTask) -> Unit,
 ) {
-    var taskName     by remember { mutableStateOf(task.taskName) }
-    var frequency    by remember { mutableStateOf(task.frequency) }
-    var dateText     by remember { mutableStateOf(task.scheduledAt?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(it)) } ?: "") }
-    var timeText     by remember { mutableStateOf(task.scheduledAt?.let { SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it)) } ?: "") }
-    var reminderMin  by remember { mutableStateOf(task.reminderMinutesBefore) }
-    var freqExpanded by remember { mutableStateOf(false) }
+    var taskName         by remember { mutableStateOf(task.taskName) }
+    var frequency        by remember { mutableStateOf(task.frequency) }
+    var reminderMin      by remember { mutableStateOf(task.reminderMinutesBefore) }
+    var freqExpanded     by remember { mutableStateOf(false) }
     var reminderExpanded by remember { mutableStateOf(false) }
+    var showDatePicker   by remember { mutableStateOf(false) }
+    var showTimePicker   by remember { mutableStateOf(false) }
+
+    val initialCal = Cal.getInstance().also { cal ->
+        task.scheduledAt?.let { cal.timeInMillis = it }
+    }
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = task.scheduledAt)
+    val timePickerState = rememberTimePickerState(
+        initialHour   = initialCal.get(Cal.HOUR_OF_DAY),
+        initialMinute = initialCal.get(Cal.MINUTE),
+        is24Hour      = true,
+    )
+    val dateInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val timeInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val datePressed by dateInteraction.collectIsPressedAsState()
+    val timePressed by timeInteraction.collectIsPressedAsState()
+
+    LaunchedEffect(datePressed) { if (datePressed) showDatePicker = true }
+    LaunchedEffect(timePressed) { if (timePressed) showTimePicker = true }
+
+    val dateLabel = datePickerState.selectedDateMillis?.let {
+        SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(it))
+    } ?: "Pick date"
+    val timeLabel = "%02d:%02d".format(timePickerState.hour, timePickerState.minute)
 
     val reminderOptions = listOf(null to "No reminder", 0 to "At the time",
         1 to "1 min before", 5 to "5 min before", 15 to "15 min before", 30 to "30 min before")
     val reminderLabel = reminderOptions.firstOrNull { it.first == reminderMin }?.second ?: "No reminder"
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = { TextButton(onClick = { showDatePicker = false }) { Text("OK") } },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } },
+        ) { DatePicker(state = datePickerState) }
+    }
+
+    if (showTimePicker) {
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = { TextButton(onClick = { showTimePicker = false }) { Text("OK") } },
+            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancel") } },
+            text = { TimePicker(state = timePickerState) },
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -495,12 +568,18 @@ private fun EditTaskDialog(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = dateText, onValueChange = { dateText = it },
-                        label = { Text("Date (dd/MM/yyyy)") }, singleLine = true, modifier = Modifier.weight(1f),
+                        value = dateLabel, onValueChange = {}, readOnly = true,
+                        label = { Text("Date") }, singleLine = true,
+                        trailingIcon = { Icon(Icons.Default.CalendarMonth, null) },
+                        modifier = Modifier.weight(1f),
+                        interactionSource = dateInteraction,
                     )
                     OutlinedTextField(
-                        value = timeText, onValueChange = { timeText = it },
-                        label = { Text("Time (HH:mm)") }, singleLine = true, modifier = Modifier.weight(1f),
+                        value = timeLabel, onValueChange = {}, readOnly = true,
+                        label = { Text("Time") }, singleLine = true,
+                        trailingIcon = { Icon(Icons.Default.Schedule, null) },
+                        modifier = Modifier.weight(1f),
+                        interactionSource = timeInteraction,
                     )
                 }
                 ExposedDropdownMenuBox(expanded = reminderExpanded, onExpandedChange = { reminderExpanded = it }) {
@@ -522,7 +601,7 @@ private fun EditTaskDialog(
         confirmButton = {
             Button(onClick = {
                 if (taskName.isBlank()) return@Button
-                val scheduledAt = parseDateTime(dateText, timeText)
+                val scheduledAt = buildScheduledAt(datePickerState.selectedDateMillis, timePickerState.hour, timePickerState.minute)
                 onConfirm(task.copy(taskName = taskName, frequency = frequency, scheduledAt = scheduledAt, reminderMinutesBefore = reminderMin))
             }) { Text("Save") }
         },
@@ -624,14 +703,17 @@ private fun RespondAssignmentDialog(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Parse "dd/MM/yyyy" + "HH:mm" into epoch millis, or null if invalid. */
-private fun parseDateTime(dateStr: String, timeStr: String): Long? {
-    return try {
-        val fmt = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-        fmt.isLenient = false
-        val combined = "${dateStr.trim()} ${timeStr.trim()}"
-        fmt.parse(combined)?.time
-    } catch (e: Exception) {
-        null
-    }
+/**
+ * Combines a date from the DatePicker (midnight UTC epoch) with hour/minute from
+ * the TimePicker into a local-time epoch-ms value, or null if no date was picked.
+ */
+private fun buildScheduledAt(dateMillis: Long?, hour: Int, minute: Int): Long? {
+    dateMillis ?: return null
+    val cal = Cal.getInstance()
+    cal.timeInMillis = dateMillis
+    cal.set(Cal.HOUR_OF_DAY, hour)
+    cal.set(Cal.MINUTE, minute)
+    cal.set(Cal.SECOND, 0)
+    cal.set(Cal.MILLISECOND, 0)
+    return cal.timeInMillis
 }

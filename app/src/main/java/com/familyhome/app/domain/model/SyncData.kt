@@ -12,6 +12,9 @@ data class SyncPayload(
     val expenses: List<ExpenseDto>? = null,
     val budgets: List<BudgetDto>? = null,
     val customStockCategories: List<CustomStockCategoryDto>? = null,
+    val customExpenseCategories: List<CustomExpenseCategoryDto>? = null,
+    /** ID of the user who initiated this push; null when coming from the server. */
+    val pusherId: String? = null,
     val snapshotAt: Long = System.currentTimeMillis(),
 )
 
@@ -29,6 +32,10 @@ data class SyncPayload(
 )
 
 @Serializable data class CustomStockCategoryDto(
+    val id: String, val name: String, val iconName: String,
+)
+
+@Serializable data class CustomExpenseCategoryDto(
     val id: String, val name: String, val iconName: String,
 )
 

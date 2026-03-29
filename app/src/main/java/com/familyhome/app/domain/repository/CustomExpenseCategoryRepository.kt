@@ -8,4 +8,5 @@ interface CustomExpenseCategoryRepository {
     suspend fun insertCategory(category: CustomExpenseCategory)
     suspend fun updateCategory(category: CustomExpenseCategory)
     suspend fun deleteCategory(id: String)
+    suspend fun upsertAll(categories: List<CustomExpenseCategory>)
 }

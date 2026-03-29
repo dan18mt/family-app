@@ -8,8 +8,10 @@ import com.familyhome.app.data.onboarding.InviteDto
 import com.familyhome.app.data.onboarding.JoinRequestDto
 import com.familyhome.app.data.onboarding.KnockDto
 import com.familyhome.app.data.onboarding.NetworkMonitor
+import com.familyhome.app.data.onboarding.NsdHelper
 import com.familyhome.app.data.onboarding.OnboardingClient
 import com.familyhome.app.data.onboarding.OnboardingState
+import com.familyhome.app.data.sync.MemberPresenceTracker
 import com.familyhome.app.data.sync.SyncRepositoryImpl
 import com.familyhome.app.data.sync.SyncServer
 import com.familyhome.app.domain.model.Role
@@ -18,10 +20,12 @@ import com.familyhome.app.domain.model.SyncResult
 import com.familyhome.app.domain.model.User
 import com.familyhome.app.domain.usecase.expense.CheckBudgetAlertUseCase
 import com.familyhome.app.domain.usecase.stock.GetLowStockItemsUseCase
+import com.familyhome.app.domain.usecase.user.DeleteFamilyMemberUseCase
 import com.familyhome.app.domain.usecase.user.GetCurrentUserUseCase
 import com.familyhome.app.domain.usecase.user.GetFamilyMembersUseCase
 import com.familyhome.app.domain.usecase.user.UpdateProfileUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.net.Inet4Address
@@ -43,6 +47,9 @@ data class HomeUiState(
     val knockError: String? = null,
     val pendingJoinRequests: List<JoinRequestDto> = emptyList(),
     val unreadNotificationCount: Int = 0,
+    /** userId → last-seen epoch-ms (only populated on Father's device via MemberPresenceTracker) */
+    val memberLastSeen: Map<String, Long> = emptyMap(),
+    val kickError: String? = null,
 )
 
 @HiltViewModel
@@ -57,7 +64,10 @@ class HomeViewModel @Inject constructor(
     private val onboardingState: OnboardingState,
     private val notificationCenter: NotificationCenter,
     private val networkMonitor: NetworkMonitor,
+    private val nsdHelper: NsdHelper,
     private val updateProfileUseCase: UpdateProfileUseCase,
+    private val deleteFamilyMemberUseCase: DeleteFamilyMemberUseCase,
+    private val presenceTracker: MemberPresenceTracker,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -65,13 +75,13 @@ class HomeViewModel @Inject constructor(
 
     init {
         loadData()
+        startAutoLoops()
     }
 
     private fun loadData() {
         viewModelScope.launch {
             val currentUser = getCurrentUserUseCase()
             _state.update { it.copy(currentUser = currentUser) }
-
             if (currentUser != null) {
                 val alerts = checkBudgetAlertUseCase(currentUser.id)
                 _state.update { it.copy(budgetAlerts = alerts) }
@@ -104,13 +114,49 @@ class HomeViewModel @Inject constructor(
 
         viewModelScope.launch {
             notificationCenter.notifications.collect { notifications ->
-                _state.update { it.copy(unreadNotificationCount = notifications.count { n -> !n.isRead }) }
+                _state.update { it.copy(unreadNotificationCount = notifications.count { n -> !n.isRead && n.isActive }) }
             }
         }
 
         viewModelScope.launch {
             syncRepository.getLastSyncTimeFlow().collect { ts ->
                 _state.update { it.copy(lastSyncAt = ts) }
+            }
+        }
+
+        viewModelScope.launch {
+            presenceTracker.lastSeen.collect { lastSeen ->
+                _state.update { it.copy(memberLastSeen = lastSeen) }
+            }
+        }
+    }
+
+    /** Auto-sync every 15 s (members only) and re-scan host every 30 s. */
+    private fun startAutoLoops() {
+        // Sync loop — 15 s
+        viewModelScope.launch {
+            delay(15_000)
+            while (true) {
+                val user = _state.value.currentUser
+                if (user != null && user.role != Role.FATHER && !_state.value.isSyncing) {
+                    performSync()
+                }
+                delay(15_000)
+            }
+        }
+        // Reconnect / re-scan loop — 30 s
+        viewModelScope.launch {
+            delay(30_000)
+            while (true) {
+                val user = _state.value.currentUser
+                if (user != null && user.role != Role.FATHER) {
+                    val reachable = syncRepository.ping()
+                    if (!reachable) {
+                        // Host unreachable — trigger a fresh NSD browse to re-discover the host IP
+                        nsdHelper.startBrowsing(NsdHelper.FATHER_SERVICE_TYPE)
+                    }
+                }
+                delay(30_000)
             }
         }
     }
@@ -140,11 +186,20 @@ class HomeViewModel @Inject constructor(
         val fatherId = _state.value.currentUser?.id ?: return
         viewModelScope.launch {
             syncServer.createMemberFromRequest(request, role, fatherId)
+                .onFailure { e -> _state.update { it.copy(kickError = e.message) } }
         }
     }
 
     fun rejectJoinRequest(request: JoinRequestDto) {
         syncServer.rejectRequest(request.deviceId)
+    }
+
+    fun kickMember(member: User) {
+        val actor = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            deleteFamilyMemberUseCase(actor, member.id)
+                .onFailure { e -> _state.update { it.copy(kickError = e.message) } }
+        }
     }
 
     fun sendInviteFromKnock(knock: KnockDto) {
@@ -174,10 +229,7 @@ class HomeViewModel @Inject constructor(
 
     fun dismissKnockError() = _state.update { it.copy(knockError = null) }
     fun dismissSyncError()  = _state.update { it.copy(syncError = null) }
-
-    override fun onCleared() {
-        super.onCleared()
-    }
+    fun dismissKickError()  = _state.update { it.copy(kickError = null) }
 
     private fun getLocalIpv4Address(): String =
         networkMonitor.getCurrentIpv4() ?: run {

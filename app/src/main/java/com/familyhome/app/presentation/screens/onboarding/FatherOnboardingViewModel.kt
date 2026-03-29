@@ -178,6 +178,7 @@ class FatherOnboardingViewModel @Inject constructor(
         val fatherId = _state.value.fatherId
         viewModelScope.launch {
             syncServer.createMemberFromRequest(request, role, fatherId)
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
         }
     }
 

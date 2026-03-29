@@ -18,9 +18,10 @@ class NotificationsViewModel @Inject constructor(
     val notifications: StateFlow<List<AppNotification>> = notificationCenter.notifications
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    fun markRead(id: String) = notificationCenter.markRead(id)
-
-    fun markAllRead() = notificationCenter.markAllRead()
-
-    fun clearAll() = notificationCenter.clear()
+    fun markRead(id: String)              = notificationCenter.markRead(id)
+    fun markAllRead()                     = notificationCenter.markAllRead()
+    fun snooze(id: String, until: Long)   = notificationCenter.snooze(id, until)
+    fun silence(id: String)               = notificationCenter.silence(id)
+    fun restore(id: String)               = notificationCenter.restore(id)
+    fun clearAll()                        = notificationCenter.clear()
 }

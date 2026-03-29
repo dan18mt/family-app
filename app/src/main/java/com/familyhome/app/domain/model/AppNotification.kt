@@ -27,4 +27,12 @@ data class AppNotification(
      * sourceId replaces any older notification with that sourceId.
      */
     val sourceId: String? = null,
-)
+    /** If true the user has silenced this alert indefinitely. */
+    val isSilenced: Boolean = false,
+    /** If non-null the alert is snoozed until this epoch-ms timestamp. */
+    val snoozedUntil: Long? = null,
+) {
+    /** True when the alert should be shown (not silenced and not currently snoozed). */
+    val isActive: Boolean
+        get() = !isSilenced && (snoozedUntil == null || System.currentTimeMillis() >= snoozedUntil)
+}

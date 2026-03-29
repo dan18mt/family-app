@@ -26,7 +26,7 @@ object DatabaseModule {
     @Provides @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FamilyDatabase =
         Room.databaseBuilder(context, FamilyDatabase::class.java, FamilyDatabase.DATABASE_NAME)
-            .fallbackToDestructiveMigration() // swap for proper migrations before production
+            .fallbackToDestructiveMigrationFrom(1, 2) // only wipe truly old DBs; new version bumps must have migrations
             .build()
 
     @Provides fun provideUserDao(db: FamilyDatabase):                       UserDao                    = db.userDao()

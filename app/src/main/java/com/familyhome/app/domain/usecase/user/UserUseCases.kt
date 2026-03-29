@@ -54,6 +54,11 @@ class CreateUserUseCase @Inject constructor(
             }
         }
 
+        val nameTaken = existingUsers.any { it.name.equals(name, ignoreCase = true) }
+        if (nameTaken) {
+            return Result.failure(IllegalStateException("A family member named '$name' already exists. Please choose a unique name."))
+        }
+
         val newUser = User(
             id        = UUID.randomUUID().toString(),
             name      = name,

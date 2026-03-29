@@ -9,6 +9,7 @@ import com.familyhome.app.data.onboarding.JoinRequestDto
 import com.familyhome.app.data.onboarding.KnockDto
 import com.familyhome.app.data.onboarding.OnboardingState
 import com.familyhome.app.domain.model.AppNotification
+import com.familyhome.app.domain.model.CustomExpenseCategoryDto
 import com.familyhome.app.domain.model.CustomStockCategory
 import com.familyhome.app.domain.model.CustomStockCategoryDto
 import com.familyhome.app.domain.model.NotificationType
@@ -46,9 +47,11 @@ class SyncServer @Inject constructor(
     private val expenseRepository: ExpenseRepository,
     private val budgetRepository: BudgetRepository,
     private val customStockCategoryRepository: CustomStockCategoryRepository,
+    private val customExpenseCategoryRepository: CustomExpenseCategoryRepository,
     private val onboardingState: OnboardingState,
     private val notificationCenter: NotificationCenter,
     private val lowStockNotifier: LowStockNotifier,
+    private val presenceTracker: MemberPresenceTracker,
 ) {
     private var server: ApplicationEngine? = null
 
@@ -94,12 +97,16 @@ class SyncServer @Inject constructor(
             budgets             = budgetRepository.getAllBudgets().first().map { it.toDto() },
             customStockCategories = customStockCategoryRepository.getAllCategories().first()
                 .map { CustomStockCategoryDto(it.id, it.name, it.iconName) },
+            customExpenseCategories = customExpenseCategoryRepository.getAllCategories().first()
+                .map { CustomExpenseCategoryDto(it.id, it.name, it.iconName) },
         )
         call.respond(payload)
     }
 
     private suspend fun handlePush(call: ApplicationCall) {
         val payload = call.receive<SyncPayload>()
+        // Track the pushing member as online
+        payload.pusherId?.let { presenceTracker.update(it) }
         mergePayload(payload)
         postSyncNotifications(payload)
         call.respond(mapOf("status" to "ok"))
@@ -141,6 +148,11 @@ class SyncServer @Inject constructor(
         payload.customStockCategories?.let {
             customStockCategoryRepository.upsertAll(
                 it.map { dto -> CustomStockCategory(dto.id, dto.name, dto.iconName) }
+            )
+        }
+        payload.customExpenseCategories?.let { dtos ->
+            customExpenseCategoryRepository.upsertAll(
+                dtos.map { dto -> com.familyhome.app.domain.model.CustomExpenseCategory(dto.id, dto.name, dto.iconName) }
             )
         }
     }
@@ -189,14 +201,19 @@ class SyncServer @Inject constructor(
 
     /**
      * Creates a new family member from an approved [JoinRequestDto].
-     * The [pinHash] in the request is already SHA-256 hashed by the member device,
-     * so it is stored as-is without a second round of hashing.
+     * Rejects if a member with the same name already exists.
      */
     suspend fun createMemberFromRequest(
         request: JoinRequestDto,
         role: Role,
         fatherId: String,
-    ): User {
+    ): Result<User> {
+        val existingUsers = userRepository.getAllUsers().first()
+        val nameTaken = existingUsers.any { it.name.equals(request.name, ignoreCase = true) }
+        if (nameTaken) {
+            return Result.failure(IllegalStateException("A family member named '${request.name}' already exists. Please use a unique name."))
+        }
+
         val newUser = User(
             id        = UUID.randomUUID().toString(),
             name      = request.name,
@@ -216,7 +233,7 @@ class SyncServer @Inject constructor(
             title   = "Member joined",
             message = "${newUser.name} is now part of your family as ${newUser.role.displayName}",
         ))
-        return newUser
+        return Result.success(newUser)
     }
 
     fun rejectRequest(deviceId: String) {

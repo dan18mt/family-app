@@ -7,6 +7,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.familyhome.app.data.mapper.*
 import com.familyhome.app.data.notification.AlarmScheduler
 import com.familyhome.app.data.notification.LowStockNotifier
+import com.familyhome.app.domain.model.CustomExpenseCategory
+import com.familyhome.app.domain.model.CustomExpenseCategoryDto
 import com.familyhome.app.domain.model.CustomStockCategory
 import com.familyhome.app.domain.model.CustomStockCategoryDto
 import com.familyhome.app.domain.model.SyncPayload
@@ -32,6 +34,7 @@ class SyncRepositoryImpl @Inject constructor(
     private val expenseRepository: ExpenseRepository,
     private val budgetRepository: BudgetRepository,
     private val customStockCategoryRepository: CustomStockCategoryRepository,
+    private val customExpenseCategoryRepository: CustomExpenseCategoryRepository,
     private val alarmScheduler: AlarmScheduler,
     private val sessionRepository: SessionRepository,
     private val lowStockNotifier: LowStockNotifier,
@@ -86,17 +89,23 @@ class SyncRepositoryImpl @Inject constructor(
 
     // ── Internal helpers ─────────────────────────────────────────────────────
 
-    private suspend fun buildLocalPayload() = SyncPayload(
-        users                 = userRepository.getAllUsers().first().map { it.toDto() },
-        stockItems            = stockRepository.getAllItems().first().map { it.toDto() },
-        choreLogs             = choreRepository.getChoreHistory(0L).first().map { it.toDto() },
-        recurringTasks        = choreRepository.getRecurringTasks().first().map { it.toDto() },
-        choreAssignments      = choreRepository.getAllAssignments().first().map { it.toAssignmentDto() },
-        expenses              = expenseRepository.getAllExpenses().first().map { it.toDto() },
-        budgets               = budgetRepository.getAllBudgets().first().map { it.toDto() },
-        customStockCategories = customStockCategoryRepository.getAllCategories().first()
-            .map { CustomStockCategoryDto(it.id, it.name, it.iconName) },
-    )
+    private suspend fun buildLocalPayload(): SyncPayload {
+        val currentUserId = sessionRepository.getCurrentUserId()
+        return SyncPayload(
+            pusherId              = currentUserId,
+            users                 = userRepository.getAllUsers().first().map { it.toDto() },
+            stockItems            = stockRepository.getAllItems().first().map { it.toDto() },
+            choreLogs             = choreRepository.getChoreHistory(0L).first().map { it.toDto() },
+            recurringTasks        = choreRepository.getRecurringTasks().first().map { it.toDto() },
+            choreAssignments      = choreRepository.getAllAssignments().first().map { it.toAssignmentDto() },
+            expenses              = expenseRepository.getAllExpenses().first().map { it.toDto() },
+            budgets               = budgetRepository.getAllBudgets().first().map { it.toDto() },
+            customStockCategories = customStockCategoryRepository.getAllCategories().first()
+                .map { CustomStockCategoryDto(it.id, it.name, it.iconName) },
+            customExpenseCategories = customExpenseCategoryRepository.getAllCategories().first()
+                .map { CustomExpenseCategoryDto(it.id, it.name, it.iconName) },
+        )
+    }
 
     private suspend fun mergeRemotePayload(payload: SyncPayload) {
         payload.users?.let                 { userRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
@@ -109,6 +118,11 @@ class SyncRepositoryImpl @Inject constructor(
         payload.customStockCategories?.let {
             customStockCategoryRepository.upsertAll(
                 it.map { dto -> CustomStockCategory(dto.id, dto.name, dto.iconName) }
+            )
+        }
+        payload.customExpenseCategories?.let { dtos ->
+            customExpenseCategoryRepository.upsertAll(
+                dtos.map { dto -> CustomExpenseCategory(dto.id, dto.name, dto.iconName) }
             )
         }
 

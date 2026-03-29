@@ -173,24 +173,18 @@ class CompleteRecurringTaskUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(actor: User, task: RecurringTask): Result<Unit> {
         val now = System.currentTimeMillis()
-        val nextDue = when (task.frequency) {
-            Frequency.DAILY  -> now + TimeUnit.DAYS.toMillis(1)
-            Frequency.WEEKLY -> now + TimeUnit.DAYS.toMillis(7)
-            Frequency.CUSTOM -> now + TimeUnit.DAYS.toMillis(1)
-        }
-        choreRepository.updateRecurringTask(
-            task.copy(lastDoneAt = now, nextDueAt = nextDue)
-        )
-        // Also write a ChoreLog entry
+        // Write a history entry so the completion is recorded
         choreRepository.logChore(
             ChoreLog(
                 id       = UUID.randomUUID().toString(),
                 taskName = task.taskName,
                 doneBy   = actor.id,
                 doneAt   = now,
-                note     = "Recurring task completed",
+                note     = "Scheduled task completed",
             )
         )
+        // Remove the task from the scheduled list so it disappears after Done
+        choreRepository.deleteRecurringTask(task.id)
         return Result.success(Unit)
     }
 }

@@ -45,6 +45,27 @@ class NotificationCenter @Inject constructor() {
         _notifications.update { list -> list.map { it.copy(isRead = true) } }
     }
 
+    /** Snooze an alert: hide it until [untilMillis]. */
+    fun snooze(id: String, untilMillis: Long) {
+        _notifications.update { list ->
+            list.map { if (it.id == id) it.copy(snoozedUntil = untilMillis, isRead = true) else it }
+        }
+    }
+
+    /** Silence an alert indefinitely. */
+    fun silence(id: String) {
+        _notifications.update { list ->
+            list.map { if (it.id == id) it.copy(isSilenced = true, isRead = true) else it }
+        }
+    }
+
+    /** Restore a snoozed or silenced alert so it becomes active again. */
+    fun restore(id: String) {
+        _notifications.update { list ->
+            list.map { if (it.id == id) it.copy(isSilenced = false, snoozedUntil = null) else it }
+        }
+    }
+
     fun clear() {
         _notifications.value = emptyList()
     }
