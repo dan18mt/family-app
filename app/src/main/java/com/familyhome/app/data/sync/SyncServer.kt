@@ -35,9 +35,6 @@ import javax.inject.Singleton
 /**
  * Embedded Ktor HTTP server that runs on the host device (Father's phone).
  * Handles both data sync and onboarding join requests from member devices.
- *
- * To swap in Firebase later: delete this class and [SyncClient], replace
- * [SyncRepositoryImpl] with a Firestore-backed implementation — domain layer unchanged.
  */
 @Singleton
 class SyncServer @Inject constructor(
@@ -52,6 +49,7 @@ class SyncServer @Inject constructor(
     private val notificationCenter: NotificationCenter,
     private val lowStockNotifier: LowStockNotifier,
     private val presenceTracker: MemberPresenceTracker,
+    private val deletionTracker: DeletionTracker,
 ) {
     private var server: ApplicationEngine? = null
 
@@ -64,12 +62,10 @@ class SyncServer @Inject constructor(
                 json(Json { ignoreUnknownKeys = true })
             }
             routing {
-                // ── Sync ─────────────────────────────────────────────────────
                 get("/ping")        { call.respond("pong") }
                 get("/sync/pull")   { handlePull(call) }
                 post("/sync/push")  { handlePush(call) }
 
-                // ── Onboarding ────────────────────────────────────────────────
                 get("/onboarding/info")                  { handleOnboardingInfo(call) }
                 post("/onboarding/join-request")         { handleJoinRequest(call) }
                 get("/onboarding/pending")               { handleGetPending(call) }
@@ -87,25 +83,33 @@ class SyncServer @Inject constructor(
     // ── Sync handlers ────────────────────────────────────────────────────────
 
     private suspend fun handlePull(call: ApplicationCall) {
+        val father = userRepository.getAllUsers().first().firstOrNull { it.role == Role.FATHER }
+
+        // Build presence map: include all tracked member presence + leader's own timestamp
+        val presenceMap = presenceTracker.lastSeen.value.toMutableMap()
+        father?.let { presenceMap[it.id] = System.currentTimeMillis() }
+
         val payload = SyncPayload(
-            users               = userRepository.getAllUsers().first().map { it.toDto() },
-            stockItems          = stockRepository.getAllItems().first().map { it.toDto() },
-            choreLogs           = choreRepository.getChoreHistory(0L).first().map { it.toDto() },
-            recurringTasks      = choreRepository.getRecurringTasks().first().map { it.toDto() },
-            choreAssignments    = choreRepository.getAllAssignments().first().map { it.toAssignmentDto() },
-            expenses            = expenseRepository.getAllExpenses().first().map { it.toDto() },
-            budgets             = budgetRepository.getAllBudgets().first().map { it.toDto() },
-            customStockCategories = customStockCategoryRepository.getAllCategories().first()
+            users                   = userRepository.getAllUsers().first().map { it.toDto() },
+            stockItems              = stockRepository.getAllItems().first().map { it.toDto() },
+            choreLogs               = choreRepository.getChoreHistory(0L).first().map { it.toDto() },
+            recurringTasks          = choreRepository.getRecurringTasks().first().map { it.toDto() },
+            choreAssignments        = choreRepository.getAllAssignments().first().map { it.toAssignmentDto() },
+            expenses                = expenseRepository.getAllExpenses().first().map { it.toDto() },
+            budgets                 = budgetRepository.getAllBudgets().first().map { it.toDto() },
+            customStockCategories   = customStockCategoryRepository.getAllCategories().first()
                 .map { CustomStockCategoryDto(it.id, it.name, it.iconName) },
             customExpenseCategories = customExpenseCategoryRepository.getAllCategories().first()
                 .map { CustomExpenseCategoryDto(it.id, it.name, it.iconName) },
+            deletedUserIds          = deletionTracker.getDeletedUserIds().toList().ifEmpty { null },
+            presenceMap             = presenceMap.ifEmpty { null },
+            leaderId                = father?.id,
         )
         call.respond(payload)
     }
 
     private suspend fun handlePush(call: ApplicationCall) {
         val payload = call.receive<SyncPayload>()
-        // Track the pushing member as online
         payload.pusherId?.let { presenceTracker.update(it) }
         mergePayload(payload)
         postSyncNotifications(payload)
@@ -130,15 +134,20 @@ class SyncServer @Inject constructor(
             ))
         }
         payload.stockItems?.let { dtos ->
-            dtos.map { it.toDomain() }.forEach { item ->
-                lowStockNotifier.notifyIfLow(item)
-            }
+            dtos.map { it.toDomain() }.forEach { item -> lowStockNotifier.notifyIfLow(item) }
         }
     }
 
-    /** Last-write-wins merge: upsert everything received from the client. */
+    /**
+     * Last-write-wins merge. Deleted users are never re-inserted — the leader's
+     * deletions are the source of truth for user membership.
+     */
     private suspend fun mergePayload(payload: SyncPayload) {
-        payload.users?.let                 { userRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.users?.let { dtos ->
+            val deleted = deletionTracker.getDeletedUserIds()
+            val toUpsert = dtos.filter { it.id !in deleted }
+            if (toUpsert.isNotEmpty()) userRepository.upsertAll(toUpsert.map { it.toDomain() })
+        }
         payload.stockItems?.let            { stockRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
         payload.choreLogs?.let             { choreRepository.upsertAllLogs(it.map { dto -> dto.toDomain() }) }
         payload.recurringTasks?.let        { choreRepository.upsertAllRecurring(it.map { dto -> dto.toDomain() }) }
@@ -197,12 +206,8 @@ class SyncServer @Inject constructor(
         call.respond(onboardingState.getApprovalStatus(deviceId))
     }
 
-    // ── Member creation (called directly by FatherOnboardingViewModel) ───────
+    // ── Member creation ──────────────────────────────────────────────────────
 
-    /**
-     * Creates a new family member from an approved [JoinRequestDto].
-     * Rejects if a member with the same name already exists.
-     */
     suspend fun createMemberFromRequest(
         request: JoinRequestDto,
         role: Role,

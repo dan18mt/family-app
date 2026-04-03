@@ -16,6 +16,12 @@ data class SyncPayload(
     /** ID of the user who initiated this push; null when coming from the server. */
     val pusherId: String? = null,
     val snapshotAt: Long = System.currentTimeMillis(),
+    /** User IDs that have been deleted by the leader; members must remove these locally. */
+    val deletedUserIds: List<String>? = null,
+    /** userId → last-seen epoch-ms map; used to propagate presence to all devices. */
+    val presenceMap: Map<String, Long>? = null,
+    /** ID of the family leader (Father); included in pull responses. */
+    val leaderId: String? = null,
 )
 
 @Serializable data class UserDto(

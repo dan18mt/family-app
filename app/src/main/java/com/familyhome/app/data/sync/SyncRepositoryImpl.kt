@@ -38,6 +38,8 @@ class SyncRepositoryImpl @Inject constructor(
     private val alarmScheduler: AlarmScheduler,
     private val sessionRepository: SessionRepository,
     private val lowStockNotifier: LowStockNotifier,
+    private val presenceTracker: MemberPresenceTracker,
+    private val deletionTracker: DeletionTracker,
 ) {
     private val lastSyncKey = longPreferencesKey("last_sync_time")
     private val hostIpKey   = stringPreferencesKey("sync_host_ip")
@@ -68,7 +70,7 @@ class SyncRepositoryImpl @Inject constructor(
             ?: return SyncResult.Error("Host IP not configured.")
 
         return runCatching {
-            // 1. Push local snapshot to host
+            // 1. Push local snapshot to host (excluding locally-tracked deleted users)
             val localPayload = buildLocalPayload()
             syncClient.push(ip, syncPort, localPayload)
 
@@ -91,9 +93,13 @@ class SyncRepositoryImpl @Inject constructor(
 
     private suspend fun buildLocalPayload(): SyncPayload {
         val currentUserId = sessionRepository.getCurrentUserId()
+        val deleted = deletionTracker.getDeletedUserIds()
         return SyncPayload(
             pusherId              = currentUserId,
-            users                 = userRepository.getAllUsers().first().map { it.toDto() },
+            // Filter out locally-known deleted users so they are never re-pushed to leader
+            users                 = userRepository.getAllUsers().first()
+                .filter { it.id !in deleted }
+                .map { it.toDto() },
             stockItems            = stockRepository.getAllItems().first().map { it.toDto() },
             choreLogs             = choreRepository.getChoreHistory(0L).first().map { it.toDto() },
             recurringTasks        = choreRepository.getRecurringTasks().first().map { it.toDto() },
@@ -108,7 +114,21 @@ class SyncRepositoryImpl @Inject constructor(
     }
 
     private suspend fun mergeRemotePayload(payload: SyncPayload) {
-        payload.users?.let                 { userRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        // 1. Apply leader deletions first — leader is authoritative for user membership
+        payload.deletedUserIds?.let { ids ->
+            ids.forEach { userId ->
+                userRepository.deleteUser(userId)
+                // Record locally so this device never re-pushes the deleted user
+                deletionTracker.recordUserDeletion(userId)
+            }
+        }
+
+        // 2. Upsert data (skip any users that are now known to be deleted)
+        val deleted = deletionTracker.getDeletedUserIds()
+        payload.users?.let { dtos ->
+            val toUpsert = dtos.filter { it.id !in deleted }
+            if (toUpsert.isNotEmpty()) userRepository.upsertAll(toUpsert.map { it.toDomain() })
+        }
         payload.stockItems?.let            { stockRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
         payload.choreLogs?.let             { choreRepository.upsertAllLogs(it.map { dto -> dto.toDomain() }) }
         payload.recurringTasks?.let        { choreRepository.upsertAllRecurring(it.map { dto -> dto.toDomain() }) }
@@ -126,6 +146,12 @@ class SyncRepositoryImpl @Inject constructor(
             )
         }
 
+        // 3. Update local presence tracker from leader's presence map (enables all-device status)
+        payload.presenceMap?.forEach { (userId, lastSeenAt) ->
+            presenceTracker.updateWithTimestamp(userId, lastSeenAt)
+        }
+
+        // 4. Schedule any alarms for tasks assigned to this user
         payload.recurringTasks?.let { dtos ->
             val currentUserId = sessionRepository.getCurrentUserId()
             if (currentUserId != null) {
@@ -142,10 +168,9 @@ class SyncRepositoryImpl @Inject constructor(
             }
         }
 
+        // 5. Low stock notifications
         payload.stockItems?.let { dtos ->
-            dtos.map { it.toDomain() }.forEach { item ->
-                lowStockNotifier.notifyIfLow(item)
-            }
+            dtos.map { it.toDomain() }.forEach { item -> lowStockNotifier.notifyIfLow(item) }
         }
     }
 }

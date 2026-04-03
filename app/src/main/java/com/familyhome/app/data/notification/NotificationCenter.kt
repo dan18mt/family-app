@@ -23,15 +23,22 @@ class NotificationCenter @Inject constructor() {
 
     fun post(notification: AppNotification) {
         _notifications.update { list ->
-            // If sourceId is set, remove any earlier notification with the same sourceId
-            // before prepending the new one. This prevents duplicates when, e.g., a budget
-            // notification is re-sent 10 minutes after the first one.
-            val deduplicated = if (notification.sourceId != null) {
-                list.filter { it.sourceId != notification.sourceId }
+            if (notification.sourceId != null) {
+                val existing = list.find { it.sourceId == notification.sourceId }
+                // Preserve user's snooze/silence preference so a sync re-post doesn't reset it
+                val toInsert = if (existing != null && (existing.isSilenced || existing.snoozedUntil != null)) {
+                    notification.copy(
+                        isSilenced   = existing.isSilenced,
+                        snoozedUntil = existing.snoozedUntil,
+                        isRead       = existing.isRead,
+                    )
+                } else {
+                    notification
+                }
+                listOf(toInsert) + list.filter { it.sourceId != notification.sourceId }
             } else {
-                list
+                listOf(notification) + list
             }
-            listOf(notification) + deduplicated
         }
     }
 

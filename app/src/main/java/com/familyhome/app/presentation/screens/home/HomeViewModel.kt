@@ -11,6 +11,7 @@ import com.familyhome.app.data.onboarding.NetworkMonitor
 import com.familyhome.app.data.onboarding.NsdHelper
 import com.familyhome.app.data.onboarding.OnboardingClient
 import com.familyhome.app.data.onboarding.OnboardingState
+import com.familyhome.app.data.sync.DeletionTracker
 import com.familyhome.app.data.sync.MemberPresenceTracker
 import com.familyhome.app.data.sync.SyncRepositoryImpl
 import com.familyhome.app.data.sync.SyncServer
@@ -28,6 +29,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.util.Collections
@@ -47,7 +49,7 @@ data class HomeUiState(
     val knockError: String? = null,
     val pendingJoinRequests: List<JoinRequestDto> = emptyList(),
     val unreadNotificationCount: Int = 0,
-    /** userId → last-seen epoch-ms (only populated on Father's device via MemberPresenceTracker) */
+    /** userId → last-seen epoch-ms; populated on all devices after sync. */
     val memberLastSeen: Map<String, Long> = emptyMap(),
     val kickError: String? = null,
 )
@@ -68,6 +70,7 @@ class HomeViewModel @Inject constructor(
     private val updateProfileUseCase: UpdateProfileUseCase,
     private val deleteFamilyMemberUseCase: DeleteFamilyMemberUseCase,
     private val presenceTracker: MemberPresenceTracker,
+    private val deletionTracker: DeletionTracker,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -134,25 +137,18 @@ class HomeViewModel @Inject constructor(
 
     /**
      * Start NSD based on role:
-     *  - Father  → ensure the Ktor server is running and re-advertise via NSD so members
-     *              can always discover the current host IP (survives app restarts + IP changes).
-     *  - Member  → browse for Father's NSD service; whenever a host is (re)discovered,
-     *              persist its IP and trigger a sync immediately.
+     *  - Father  → advertise via NSD so members can always discover the current host IP.
+     *  - Member  → browse for Father's NSD service; whenever discovered, update IP and sync.
      */
     private fun startNsdForRole() {
         viewModelScope.launch {
             val user = getCurrentUserUseCase() ?: return@launch
             if (user.role == Role.FATHER) {
-                // Idempotent: server has `if (isRunning) return` guard
                 syncRepository.startHostServer()
                 nsdHelper.startAdvertising("FamilyHome_Host", 8765, NsdHelper.FATHER_SERVICE_TYPE)
             } else {
-                // Start continuous discovery; NsdHelper will re-browse on network reconnect
-                // automatically via its NetworkMonitor callback.
                 nsdHelper.startBrowsing(NsdHelper.FATHER_SERVICE_TYPE)
 
-                // Whenever the Father service is (re)discovered, update the stored host IP
-                // and sync immediately — this is the primary reconnect mechanism.
                 nsdHelper.discoveredDevices
                     .filter { it.isNotEmpty() }
                     .collect { devices ->
@@ -170,7 +166,6 @@ class HomeViewModel @Inject constructor(
 
     /** Auto-sync every 15 s (members only, silent) + NSD safety-net re-browse every 60 s. */
     private fun startAutoLoops() {
-        // Periodic sync — 15 s, background, errors suppressed
         viewModelScope.launch {
             while (true) {
                 delay(15_000)
@@ -180,7 +175,6 @@ class HomeViewModel @Inject constructor(
                 }
             }
         }
-        // NSD safety-net: restart browsing every 60 s in case the OS silently killed it
         viewModelScope.launch {
             while (true) {
                 delay(60_000)
@@ -199,9 +193,11 @@ class HomeViewModel @Inject constructor(
 
     /**
      * Run a sync cycle.
-     * [isManual] = true  → always surface errors to the user (button tap).
-     * [isManual] = false → silent: no snackbar on failure, no error when offline.
-     *                      The next auto or NSD-triggered attempt will retry.
+     *
+     * On failure for a manual sync, automatically attempts NSD rediscovery of the leader.
+     * - If the leader is found on a new IP → updates stored IP and retries once.
+     * - If the leader is not found → shows "Family leader is not on the same network."
+     * For auto-sync, failures silently trigger an NSD re-browse for the next cycle.
      */
     private suspend fun performSync(isManual: Boolean = false) {
         if (!networkMonitor.isWifiConnected.value) {
@@ -209,11 +205,57 @@ class HomeViewModel @Inject constructor(
             return
         }
         _state.update { it.copy(isSyncing = true, syncError = null) }
+
         when (val result = syncRepository.syncWithHost()) {
-            is SyncResult.Success -> _state.update { it.copy(isSyncing = false, lastSyncAt = result.syncedAt) }
-            is SyncResult.Error   -> _state.update {
-                it.copy(isSyncing = false, syncError = if (isManual) result.message else null)
+            is SyncResult.Success -> {
+                _state.update { it.copy(isSyncing = false, lastSyncAt = result.syncedAt) }
             }
+            is SyncResult.Error -> {
+                if (isManual) {
+                    // Try to find the leader on a (possibly new) IP via NSD
+                    val leaderFound = tryRediscoverLeader()
+                    if (leaderFound) {
+                        // Retry with the updated IP
+                        when (val retryResult = syncRepository.syncWithHost()) {
+                            is SyncResult.Success -> _state.update {
+                                it.copy(isSyncing = false, lastSyncAt = retryResult.syncedAt)
+                            }
+                            is SyncResult.Error -> _state.update {
+                                it.copy(isSyncing = false, syncError = retryResult.message)
+                            }
+                        }
+                    } else {
+                        val errorMsg = if (networkMonitor.isWifiConnected.value)
+                            "Family leader is not on the same network."
+                        else
+                            "Not connected to Wi-Fi."
+                        _state.update { it.copy(isSyncing = false, syncError = errorMsg) }
+                    }
+                } else {
+                    // Auto-sync failure: silently trigger NSD re-browse for the next attempt
+                    nsdHelper.startBrowsing(NsdHelper.FATHER_SERVICE_TYPE)
+                    _state.update { it.copy(isSyncing = false) }
+                }
+            }
+        }
+    }
+
+    /**
+     * Restart NSD browsing and wait up to 8 seconds for the leader to be discovered.
+     * If found, saves the new IP and returns true.
+     */
+    private suspend fun tryRediscoverLeader(): Boolean {
+        nsdHelper.startBrowsing(NsdHelper.FATHER_SERVICE_TYPE)
+        val found = withTimeoutOrNull(8_000L) {
+            nsdHelper.discoveredDevices.first { it.isNotEmpty() }
+        }
+        return if (found != null) {
+            val device = found.first()
+            syncRepository.saveHostIp(device.hostAddress)
+            Log.d("HomeViewModel", "Leader rediscovered at ${device.hostAddress}")
+            true
+        } else {
+            false
         }
     }
 
@@ -241,6 +283,10 @@ class HomeViewModel @Inject constructor(
         val actor = _state.value.currentUser ?: return
         viewModelScope.launch {
             deleteFamilyMemberUseCase(actor, member.id)
+                .onSuccess {
+                    // Record deletion so it propagates to all member devices on next sync
+                    deletionTracker.recordUserDeletion(member.id)
+                }
                 .onFailure { e -> _state.update { it.copy(kickError = e.message) } }
         }
     }

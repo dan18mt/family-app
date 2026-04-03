@@ -1,5 +1,7 @@
 package com.familyhome.app.data.notification
 
+import android.annotation.SuppressLint
+import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -29,7 +31,11 @@ interface AlarmReceiverEntryPoint {
  * Two types of alarms:
  *  - Reminder (isOverdue=false): fires X minutes before the scheduled time.
  *  - Overdue check (isOverdue=true): fires 1 hour after the scheduled time.
- *    Shows a pop-up notification with Done / Reschedule / Remind Later actions.
+ *    Shows a pop-up notification with Done / Remind in 30 min / Open App actions.
+ *
+ * Action buttons handled here (per-device — never crosses to other devices):
+ *  - ACTION_DONE: dismiss the overdue notification on this device only.
+ *  - ACTION_REMIND_LATER: dismiss + reschedule overdue check 30 min later on this device only.
  */
 class ChoreAlarmReceiver : BroadcastReceiver() {
 
@@ -37,35 +43,55 @@ class ChoreAlarmReceiver : BroadcastReceiver() {
         const val CHANNEL_ID_REMINDERS = "chore_reminders"
         const val CHANNEL_ID_OVERDUE   = "chore_overdue"
 
-        // Action constants for notification action buttons
         const val ACTION_DONE          = "com.familyhome.app.CHORE_DONE"
         const val ACTION_REMIND_LATER  = "com.familyhome.app.CHORE_REMIND_LATER"
         const val EXTRA_TASK_ID        = AlarmScheduler.EXTRA_TASK_ID
         const val EXTRA_TASK_NAME      = AlarmScheduler.EXTRA_TASK_NAME
         const val EXTRA_IS_OVERDUE     = AlarmScheduler.EXTRA_IS_OVERDUE
+
+        private fun overdueNotifId(taskId: String) = (taskId.hashCode() xor 0x00FF0000) and 0x7FFFFFFF
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        val taskId   = intent.getStringExtra(EXTRA_TASK_ID) ?: return
-        val taskName = intent.getStringExtra(EXTRA_TASK_NAME) ?: "Chore"
-        val isOverdue = intent.getBooleanExtra(EXTRA_IS_OVERDUE, false)
+        when (intent.action) {
+            ACTION_DONE -> {
+                val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: return
+                // Dismiss the overdue notification on this device only
+                context.getSystemService(NotificationManager::class.java)
+                    .cancel(overdueNotifId(taskId))
+            }
 
-        val assignedTo = intent.getStringExtra(AlarmScheduler.EXTRA_ASSIGNED_TO)
-        if (assignedTo != null) {
-            val ep = EntryPointAccessors.fromApplication(
-                context.applicationContext,
-                AlarmReceiverEntryPoint::class.java,
-            )
-            val currentUserId = runBlocking { ep.sessionRepository().getCurrentUserId() }
-            if (currentUserId != assignedTo) return
-        }
+            ACTION_REMIND_LATER -> {
+                val taskId   = intent.getStringExtra(EXTRA_TASK_ID) ?: return
+                val taskName = intent.getStringExtra(EXTRA_TASK_NAME) ?: "Chore"
+                // Dismiss current overdue notification on this device only
+                context.getSystemService(NotificationManager::class.java)
+                    .cancel(overdueNotifId(taskId))
+                // Re-schedule an overdue check 30 minutes from now on this device only
+                scheduleSnooze(context, taskId, taskName, 30)
+            }
 
-        ensureChannels(context)
+            else -> {
+                // Regular alarm: check assignment and show the appropriate notification
+                val taskId    = intent.getStringExtra(EXTRA_TASK_ID) ?: return
+                val taskName  = intent.getStringExtra(EXTRA_TASK_NAME) ?: "Chore"
+                val isOverdue = intent.getBooleanExtra(EXTRA_IS_OVERDUE, false)
 
-        if (isOverdue) {
-            showOverdueNotification(context, taskId, taskName)
-        } else {
-            showReminderNotification(context, taskId, taskName)
+                val assignedTo = intent.getStringExtra(AlarmScheduler.EXTRA_ASSIGNED_TO)
+                if (assignedTo != null) {
+                    val ep = EntryPointAccessors.fromApplication(
+                        context.applicationContext,
+                        AlarmReceiverEntryPoint::class.java,
+                    )
+                    val currentUserId = runBlocking { ep.sessionRepository().getCurrentUserId() }
+                    if (currentUserId != assignedTo) return
+                }
+
+                ensureChannels(context)
+
+                if (isOverdue) showOverdueNotification(context, taskId, taskName)
+                else           showReminderNotification(context, taskId, taskName)
+            }
         }
     }
 
@@ -91,7 +117,6 @@ class ChoreAlarmReceiver : BroadcastReceiver() {
         val nm = context.getSystemService(NotificationManager::class.java)
         val tapIntent = mainActivityPendingIntent(context, taskId)
 
-        // "Done" action
         val doneIntent = PendingIntent.getBroadcast(
             context,
             (taskId.hashCode() xor 0x0A0A0A0A) and 0x7FFFFFFF,
@@ -99,7 +124,6 @@ class ChoreAlarmReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        // "Remind in 30 min" action
         val remindIntent = PendingIntent.getBroadcast(
             context,
             (taskId.hashCode() xor 0x0B0B0B0B) and 0x7FFFFFFF,
@@ -124,7 +148,7 @@ class ChoreAlarmReceiver : BroadcastReceiver() {
             .addAction(0, "Open App", tapIntent)
             .build()
 
-        nm.notify((taskId.hashCode() xor 0x00FF0000) and 0x7FFFFFFF, notification)
+        nm.notify(overdueNotifId(taskId), notification)
     }
 
     private fun mainActivityPendingIntent(context: Context, taskId: String): PendingIntent {
@@ -161,5 +185,30 @@ class ChoreAlarmReceiver : BroadcastReceiver() {
                 enableVibration(true)
             })
         }
+    }
+
+    /** Schedule an overdue-style alarm [delayMinutes] from now for snooze. */
+    @SuppressLint("MissingPermission")
+    private fun scheduleSnooze(context: Context, taskId: String, taskName: String, delayMinutes: Int) {
+        val alarmManager = context.getSystemService(AlarmManager::class.java)
+        val triggerAt    = System.currentTimeMillis() + delayMinutes * 60_000L
+        val snoozeIntent = Intent(context, ChoreAlarmReceiver::class.java).apply {
+            putExtra(EXTRA_TASK_ID, taskId)
+            putExtra(EXTRA_TASK_NAME, taskName)
+            putExtra(EXTRA_IS_OVERDUE, true)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            overdueNotifId(taskId),
+            snoozeIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+            } else {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+            }
+        } catch (_: SecurityException) { /* Exact alarm permission missing — skip */ }
     }
 }
