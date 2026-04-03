@@ -1,5 +1,9 @@
 package com.familyhome.app.presentation.screens.expenses
 
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.familyhome.app.domain.model.Budget
@@ -27,7 +31,8 @@ data class ExpensesUiState(
     val budgets: List<Budget>                                   = emptyList(),
     val totalThisMonth: Long                                    = 0L,
     val selectedChartPeriod: ChartPeriod                        = ChartPeriod.MONTHLY,
-    val selectedMemberId: String?                               = null, // null = current user; FATHER can select
+    val selectedMemberId: String?                               = null,
+    val payrollStartDay: Int                                    = 1,
     val isLoading: Boolean                                      = true,
     val error: String?                                          = null,
 )
@@ -50,6 +55,7 @@ class ExpensesViewModel @Inject constructor(
     private val getAllBudgetsUseCase: GetAllBudgetsUseCase,
     private val setBudgetUseCase: SetBudgetUseCase,
     private val deleteBudgetUseCase: DeleteBudgetUseCase,
+    private val dataStore: DataStore<Preferences>,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ExpensesUiState())
@@ -57,10 +63,11 @@ class ExpensesViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            val payrollDay = dataStore.data.first()[payrollStartDayKey] ?: 1
             val user = getCurrentUserUseCase()
-            _state.update { it.copy(currentUser = user) }
+            _state.update { it.copy(currentUser = user, payrollStartDay = payrollDay) }
             if (user != null) {
-                val alerts = checkBudgetAlertUseCase(user.id)
+                val alerts = checkBudgetAlertUseCase(user.id, payrollDay)
                 _state.update { it.copy(budgetAlerts = alerts) }
             }
         }
@@ -196,14 +203,41 @@ class ExpensesViewModel @Inject constructor(
         _state.update { it.copy(selectedMemberId = userId) }
     }
 
+    /** Persist and apply the new payroll start day (1–31). */
+    fun setPayrollStartDay(day: Int) {
+        val clamped = day.coerceIn(1, 31)
+        _state.update { it.copy(payrollStartDay = clamped) }
+        viewModelScope.launch {
+            dataStore.edit { prefs -> prefs[payrollStartDayKey] = clamped }
+            // Refresh budget alerts with the new period
+            val user = _state.value.currentUser ?: return@launch
+            val alerts = checkBudgetAlertUseCase(user.id, clamped)
+            _state.update { it.copy(budgetAlerts = alerts) }
+        }
+    }
+
     fun clearError() = _state.update { it.copy(error = null) }
 
     private fun currentMonthStart(): Long {
+        val payrollDay = _state.value.payrollStartDay
         val cal = Calendar.getInstance()
-        cal.set(Calendar.DAY_OF_MONTH, 1)
+        val today = cal.get(Calendar.DAY_OF_MONTH)
+        val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val effectiveDay = minOf(payrollDay, maxDay)
+        if (today < effectiveDay) {
+            cal.add(Calendar.MONTH, -1)
+            val prevMaxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+            cal.set(Calendar.DAY_OF_MONTH, minOf(payrollDay, prevMaxDay))
+        } else {
+            cal.set(Calendar.DAY_OF_MONTH, effectiveDay)
+        }
         cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
         cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
         return cal.timeInMillis
+    }
+
+    companion object {
+        val payrollStartDayKey = intPreferencesKey("budget_payroll_start_day")
     }
 }
 

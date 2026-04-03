@@ -11,8 +11,11 @@ import com.familyhome.app.data.onboarding.NetworkMonitor
 import com.familyhome.app.data.onboarding.NsdHelper
 import com.familyhome.app.data.onboarding.OnboardingClient
 import com.familyhome.app.data.onboarding.OnboardingState
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import com.familyhome.app.data.sync.DeletionTracker
 import com.familyhome.app.data.sync.MemberPresenceTracker
+import com.familyhome.app.presentation.screens.expenses.ExpensesViewModel
 import com.familyhome.app.data.sync.SyncRepositoryImpl
 import com.familyhome.app.data.sync.SyncServer
 import com.familyhome.app.domain.model.Role
@@ -71,6 +74,7 @@ class HomeViewModel @Inject constructor(
     private val deleteFamilyMemberUseCase: DeleteFamilyMemberUseCase,
     private val presenceTracker: MemberPresenceTracker,
     private val deletionTracker: DeletionTracker,
+    private val dataStore: DataStore<Preferences>,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -87,7 +91,8 @@ class HomeViewModel @Inject constructor(
             val currentUser = getCurrentUserUseCase()
             _state.update { it.copy(currentUser = currentUser) }
             if (currentUser != null) {
-                val alerts = checkBudgetAlertUseCase(currentUser.id)
+                val payrollDay = dataStore.data.first()[ExpensesViewModel.payrollStartDayKey] ?: 1
+                val alerts = checkBudgetAlertUseCase(currentUser.id, payrollDay)
                 _state.update { it.copy(budgetAlerts = alerts) }
             }
         }

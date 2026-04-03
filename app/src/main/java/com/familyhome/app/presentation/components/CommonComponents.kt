@@ -158,9 +158,11 @@ fun LowStockBadge(modifier: Modifier = Modifier) {
             .padding(horizontal = 8.dp, vertical = 3.dp),
     ) {
         Text(
-            text  = "Low stock",
-            style = MaterialTheme.typography.labelSmall,
-            color = LowStockColor,
+            text     = "Low stock",
+            style    = MaterialTheme.typography.labelSmall,
+            color    = LowStockColor,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }

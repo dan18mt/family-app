@@ -114,14 +114,16 @@ fun ExpensesScreen(
 
     if (showManageBudgets) {
         ManageBudgetsDialog(
-            budgets     = state.budgets,
-            allUsers    = state.allUsers,
-            currentUser = state.currentUser,
-            onDismiss   = { showManageBudgets = false },
-            onAdd       = { targetUserId, category, amount, period ->
+            budgets          = state.budgets,
+            allUsers         = state.allUsers,
+            currentUser      = state.currentUser,
+            payrollStartDay  = state.payrollStartDay,
+            onDismiss        = { showManageBudgets = false },
+            onAdd            = { targetUserId, category, amount, period ->
                 viewModel.setBudget(targetUserId, category, amount, period)
             },
-            onDelete    = { budget -> viewModel.deleteBudget(budget) },
+            onDelete         = { budget -> viewModel.deleteBudget(budget) },
+            onSetPayrollDay  = { day -> viewModel.setPayrollStartDay(day) },
         )
     }
 
@@ -171,6 +173,7 @@ fun ExpensesScreen(
                     currentUser      = state.currentUser,
                     selectedPeriod   = state.selectedChartPeriod,
                     selectedMemberId = state.selectedMemberId,
+                    payrollStartDay  = state.payrollStartDay,
                     onPeriodChange   = { viewModel.setChartPeriod(it) },
                     onMemberChange   = { viewModel.setSelectedMember(it) },
                 )
@@ -232,6 +235,7 @@ private fun ExpenseChartCard(
     currentUser: User?,
     selectedPeriod: ChartPeriod,
     selectedMemberId: String?,
+    payrollStartDay: Int,
     onPeriodChange: (ChartPeriod) -> Unit,
     onMemberChange: (String?) -> Unit,
 ) {
@@ -243,7 +247,16 @@ private fun ExpenseChartCard(
             System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
         } else {
             val cal = Calendar.getInstance()
-            cal.set(Calendar.DAY_OF_MONTH, 1)
+            val today = cal.get(Calendar.DAY_OF_MONTH)
+            val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+            val effectiveDay = minOf(payrollStartDay, maxDay)
+            if (today < effectiveDay) {
+                cal.add(Calendar.MONTH, -1)
+                val prevMaxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                cal.set(Calendar.DAY_OF_MONTH, minOf(payrollStartDay, prevMaxDay))
+            } else {
+                cal.set(Calendar.DAY_OF_MONTH, effectiveDay)
+            }
             cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
             cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
             cal.timeInMillis
@@ -757,9 +770,11 @@ private fun ManageBudgetsDialog(
     budgets: List<Budget>,
     allUsers: List<User>,
     currentUser: User?,
+    payrollStartDay: Int,
     onDismiss: () -> Unit,
     onAdd: (String?, ExpenseCategory?, Long, BudgetPeriod) -> Unit,
     onDelete: (Budget) -> Unit,
+    onSetPayrollDay: (Int) -> Unit,
 ) {
     var showAddForm by remember { mutableStateOf(false) }
     val currFmt = NumberFormat.getCurrencyInstance(Locale("id", "ID"))
@@ -782,6 +797,41 @@ private fun ManageBudgetsDialog(
         title = { Text("Budgets") },
         text = {
             Column {
+                // Payroll period start setting
+                Row(
+                    modifier          = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column {
+                        Text("Payroll start day", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Day $payrollStartDay of each month",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    var expanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+                        OutlinedTextField(
+                            value         = payrollStartDay.toString(),
+                            onValueChange = {},
+                            readOnly      = true,
+                            modifier      = Modifier.width(88.dp).menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                            trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                            textStyle     = MaterialTheme.typography.bodyMedium,
+                        )
+                        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            (1..31).forEach { day ->
+                                DropdownMenuItem(
+                                    text    = { Text("Day $day") },
+                                    onClick = { onSetPayrollDay(day); expanded = false },
+                                )
+                            }
+                        }
+                    }
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 if (budgets.isEmpty()) {
                     Text("No budgets set.", style = MaterialTheme.typography.bodyMedium)
                 } else {

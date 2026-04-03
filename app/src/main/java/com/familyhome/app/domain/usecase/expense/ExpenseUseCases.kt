@@ -125,11 +125,11 @@ class CheckBudgetAlertUseCase @Inject constructor(
         val isWarning: Boolean,
     )
 
-    suspend operator fun invoke(userId: String): List<BudgetAlert> {
+    suspend operator fun invoke(userId: String, payrollStartDay: Int = 1): List<BudgetAlert> {
         val budgets = budgetRepository.getBudgetForUser(userId).first()
-        val (start, end) = currentPeriodRange(BudgetPeriod.MONTHLY)
 
         return budgets.map { budget ->
+            val (start, end) = currentPeriodRange(budget.period, payrollStartDay)
             val expenses = expenseRepository
                 .getExpensesByUserInRange(userId, start, end)
                 .first()
@@ -140,16 +140,27 @@ class CheckBudgetAlertUseCase @Inject constructor(
         }
     }
 
-    private fun currentPeriodRange(period: BudgetPeriod): Pair<Long, Long> {
+    private fun currentPeriodRange(period: BudgetPeriod, payrollStartDay: Int): Pair<Long, Long> {
         val cal = Calendar.getInstance()
-        when (period) {
+        return when (period) {
             BudgetPeriod.MONTHLY -> {
-                cal.set(Calendar.DAY_OF_MONTH, 1)
+                val today = cal.get(Calendar.DAY_OF_MONTH)
+                val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                val effectiveDay = minOf(payrollStartDay, maxDay)
+
+                if (today < effectiveDay) {
+                    // Still in previous payroll cycle — step back one month
+                    cal.add(Calendar.MONTH, -1)
+                    val prevMaxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                    cal.set(Calendar.DAY_OF_MONTH, minOf(payrollStartDay, prevMaxDay))
+                } else {
+                    cal.set(Calendar.DAY_OF_MONTH, effectiveDay)
+                }
                 cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
                 cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
                 val start = cal.timeInMillis
                 cal.add(Calendar.MONTH, 1)
-                return start to cal.timeInMillis
+                start to cal.timeInMillis
             }
             BudgetPeriod.WEEKLY -> {
                 cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
@@ -157,7 +168,7 @@ class CheckBudgetAlertUseCase @Inject constructor(
                 cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
                 val start = cal.timeInMillis
                 cal.add(Calendar.WEEK_OF_YEAR, 1)
-                return start to cal.timeInMillis
+                start to cal.timeInMillis
             }
         }
     }
