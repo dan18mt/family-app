@@ -13,6 +13,8 @@ data class SyncPayload(
     val budgets: List<BudgetDto>? = null,
     val customStockCategories: List<CustomStockCategoryDto>? = null,
     val customExpenseCategories: List<CustomExpenseCategoryDto>? = null,
+    val prayerGoalSettings: List<PrayerGoalSettingDto>? = null,
+    val prayerLogs: List<PrayerLogDto>? = null,
     /** ID of the user who initiated this push; null when coming from the server. */
     val pusherId: String? = null,
     val snapshotAt: Long = System.currentTimeMillis(),
@@ -74,6 +76,16 @@ data class SyncPayload(
 @Serializable data class BudgetDto(
     val id: String, val targetUserId: String?, val category: String?,
     val limitAmount: Long, val period: String, val setBy: String,
+)
+
+@Serializable data class PrayerGoalSettingDto(
+    val id: String, val sunnahKey: String, val isEnabled: Boolean,
+    val assignedTo: String?, val createdBy: String, val createdAt: Long,
+)
+
+@Serializable data class PrayerLogDto(
+    val id: String, val userId: String, val sunnahKey: String,
+    val epochDay: Long, val completedCount: Int, val loggedAt: Long,
 )
 
 sealed class SyncResult {

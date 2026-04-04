@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -165,7 +164,7 @@ fun HomeScreen(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         FeatureTile("Budget",  Icons.Default.AccountBalanceWallet,  listOf(Color(0xFFC77B41), Color(0xFFE8A87C)), Modifier.weight(1f)) { onNavigateTo(Screen.Expenses) }
-                        FeatureTile("AI Chat", Icons.AutoMirrored.Filled.Chat,      listOf(Color(0xFF4A4458), Color(0xFF7B6FA0)), Modifier.weight(1f)) { onNavigateTo(Screen.Chat) }
+                        FeatureTile("Ibadah",  Icons.Default.AutoAwesome,           listOf(Color(0xFF1B4332), Color(0xFF2D6A4F)), Modifier.weight(1f)) { onNavigateTo(Screen.Prayer) }
                     }
                 }
                 Spacer(Modifier.height(8.dp))

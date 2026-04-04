@@ -55,6 +55,25 @@ class NotificationCenter @Inject constructor(
             silencedSourceIds  = prefs[silencedKey]  ?: emptySet()
             snoozeMap = (prefs[snoozeKey] ?: emptySet()).decodeSnoozeMap()
                 .filter { (_, until) -> until > System.currentTimeMillis() }
+
+            // Retroactively apply persisted state to any notifications already posted
+            // before this async load completed (race-condition guard).
+            val now = System.currentTimeMillis()
+            _notifications.update { list ->
+                list.mapNotNull { n ->
+                    if (n.sourceId != null && n.sourceId in dismissedSourceIds) {
+                        null // Remove: was explicitly dismissed in a previous session
+                    } else {
+                        val silenced     = n.sourceId != null && n.sourceId in silencedSourceIds
+                        val snoozedUntil = n.sourceId?.let { snoozeMap[it] }?.takeIf { it > now }
+                        n.copy(
+                            isSilenced   = n.isSilenced || silenced,
+                            snoozedUntil = n.snoozedUntil ?: snoozedUntil,
+                            isRead       = if (silenced || snoozedUntil != null) true else n.isRead,
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -66,18 +85,18 @@ class NotificationCenter @Inject constructor(
 
         _notifications.update { list ->
             if (notification.sourceId != null) {
-                val existing = list.find { it.sourceId == notification.sourceId }
+                val existingIndex = list.indexOfFirst { it.sourceId == notification.sourceId }
                 val toInsert = when {
-                    existing != null && (existing.isSilenced || existing.snoozedUntil != null) ->
+                    existingIndex >= 0 && (list[existingIndex].isSilenced || list[existingIndex].snoozedUntil != null) ->
                         // Preserve in-session snooze/silence already applied
                         notification.copy(
-                            isSilenced   = existing.isSilenced,
-                            snoozedUntil = existing.snoozedUntil,
-                            isRead       = existing.isRead,
+                            isSilenced   = list[existingIndex].isSilenced,
+                            snoozedUntil = list[existingIndex].snoozedUntil,
+                            isRead       = list[existingIndex].isRead,
                         )
                     else -> {
                         // Apply persisted state from previous sessions
-                        val silenced    = notification.sourceId in silencedSourceIds
+                        val silenced     = notification.sourceId in silencedSourceIds
                         val snoozedUntil = snoozeMap[notification.sourceId]
                             ?.takeIf { it > System.currentTimeMillis() }
                         notification.copy(
@@ -87,7 +106,14 @@ class NotificationCenter @Inject constructor(
                         )
                     }
                 }
-                listOf(toInsert) + list.filter { it.sourceId != notification.sourceId }
+                if (existingIndex >= 0) {
+                    // Update in-place — keep the notification's current position in the list.
+                    // Avoid the visual "pop-to-top" that previously occurred on every sync re-post.
+                    list.toMutableList().also { it[existingIndex] = toInsert }
+                } else {
+                    // Genuinely new notification — insert at the top.
+                    listOf(toInsert) + list
+                }
             } else {
                 listOf(notification) + list
             }

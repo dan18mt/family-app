@@ -3,6 +3,7 @@ package com.familyhome.app.di
 import com.familyhome.app.data.repository.*
 import com.familyhome.app.data.session.SessionRepositoryImpl
 import com.familyhome.app.domain.repository.*
+import com.familyhome.app.domain.repository.PrayerRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -40,4 +41,7 @@ abstract class RepositoryModule {
     abstract fun bindCustomStockCategoryRepository(
         impl: CustomStockCategoryRepositoryImpl,
     ): CustomStockCategoryRepository
+
+    @Binds @Singleton
+    abstract fun bindPrayerRepository(impl: PrayerRepositoryImpl): PrayerRepository
 }

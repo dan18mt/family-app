@@ -4,6 +4,7 @@ import com.familyhome.app.data.local.dao.ChoreAssignmentDao
 import com.familyhome.app.data.local.dao.ChoreLogDao
 import com.familyhome.app.data.local.dao.RecurringTaskDao
 import com.familyhome.app.data.mapper.*
+import com.familyhome.app.domain.model.AssignmentStatus
 import com.familyhome.app.domain.model.ChoreAssignment
 import com.familyhome.app.domain.model.ChoreLog
 import com.familyhome.app.domain.model.RecurringTask
@@ -63,6 +64,22 @@ class ChoreRepositoryImpl @Inject constructor(
     override suspend fun updateAssignment(assignment: ChoreAssignment) =
         choreAssignmentDao.updateAssignment(assignment.toEntity())
 
-    override suspend fun upsertAllAssignments(assignments: List<ChoreAssignment>) =
-        choreAssignmentDao.upsertAll(assignments.map { it.toEntity() })
+    /**
+     * Status-preserving merge: never overwrite a responded (ACCEPTED/DECLINED) assignment
+     * with a stale PENDING copy from another device.  Last-write-wins is correct for
+     * all other fields; the status field uses "most-advanced wins" semantics.
+     */
+    override suspend fun upsertAllAssignments(assignments: List<ChoreAssignment>) {
+        val existingMap = choreAssignmentDao.getAllAssignmentsOneShot().associateBy { it.id }
+        val toUpsert = assignments.filter { incoming ->
+            val existing = existingMap[incoming.id]
+            // Allow upsert unless: existing is responded AND incoming is still PENDING
+            existing == null ||
+            incoming.status != AssignmentStatus.PENDING ||
+            existing.status == AssignmentStatus.PENDING.name
+        }
+        if (toUpsert.isNotEmpty()) {
+            choreAssignmentDao.upsertAll(toUpsert.map { it.toEntity() })
+        }
+    }
 }

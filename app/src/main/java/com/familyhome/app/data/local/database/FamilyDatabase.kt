@@ -16,8 +16,10 @@ import com.familyhome.app.data.local.entity.*
         BudgetEntity::class,
         CustomExpenseCategoryEntity::class,
         CustomStockCategoryEntity::class,
+        PrayerGoalSettingEntity::class,
+        PrayerLogEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class FamilyDatabase : RoomDatabase() {
@@ -30,6 +32,8 @@ abstract class FamilyDatabase : RoomDatabase() {
     abstract fun budgetDao(): BudgetDao
     abstract fun customExpenseCategoryDao(): CustomExpenseCategoryDao
     abstract fun customStockCategoryDao(): CustomStockCategoryDao
+    abstract fun prayerGoalSettingDao(): PrayerGoalSettingDao
+    abstract fun prayerLogDao(): PrayerLogDao
 
     companion object {
         const val DATABASE_NAME = "family_home.db"

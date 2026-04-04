@@ -1,6 +1,8 @@
 package com.familyhome.app.presentation.screens.expenses
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -167,15 +169,20 @@ fun ExpensesScreen(
 
             item {
                 ExpenseChartCard(
-                    expenses         = state.expenses,
-                    customCategories = state.customCategories,
-                    allUsers         = state.allUsers,
-                    currentUser      = state.currentUser,
-                    selectedPeriod   = state.selectedChartPeriod,
-                    selectedMemberId = state.selectedMemberId,
-                    payrollStartDay  = state.payrollStartDay,
-                    onPeriodChange   = { viewModel.setChartPeriod(it) },
-                    onMemberChange   = { viewModel.setSelectedMember(it) },
+                    expenses            = state.expenses,
+                    customCategories    = state.customCategories,
+                    allUsers            = state.allUsers,
+                    currentUser         = state.currentUser,
+                    selectedPeriod      = state.selectedChartPeriod,
+                    selectedMemberId    = state.selectedMemberId,
+                    payrollStartDay     = state.payrollStartDay,
+                    dateRangeFrom       = state.dateRangeFrom,
+                    dateRangeTo         = state.dateRangeTo,
+                    selectedCategoryKey = state.selectedCategoryKey,
+                    onPeriodChange      = { viewModel.setChartPeriod(it) },
+                    onMemberChange      = { viewModel.setSelectedMember(it) },
+                    onDateRangeChange   = { from, to -> viewModel.setDateRange(from, to) },
+                    onCategorySelect    = { key -> viewModel.setSelectedCategory(key) },
                 )
             }
 
@@ -198,14 +205,63 @@ fun ExpensesScreen(
                 }
             }
 
-            if (state.expenses.isEmpty()) {
+            // Active filter chips
+            if (state.selectedCategoryKey != null || state.isCustomDateRange) {
+                item {
+                    LazyRow(
+                        modifier            = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (state.selectedCategoryKey != null) {
+                            val catLabel = state.customCategories
+                                .find { it.id == state.selectedCategoryKey }?.name
+                                ?: ExpenseCategory.entries
+                                    .firstOrNull { it.name == state.selectedCategoryKey }?.displayName
+                                ?: state.selectedCategoryKey
+                            item {
+                                InputChip(
+                                    selected     = true,
+                                    onClick      = { viewModel.setSelectedCategory(null) },
+                                    label        = { Text(catLabel) },
+                                    trailingIcon = { Icon(Icons.Default.Close, "Clear", Modifier.size(16.dp)) },
+                                )
+                            }
+                        }
+                        if (state.isCustomDateRange) {
+                            val dateFmt = SimpleDateFormat("dd MMM yy", Locale.getDefault())
+                            val label = buildString {
+                                state.dateRangeFrom?.let { append(dateFmt.format(Date(it))) }
+                                append(" – ")
+                                state.dateRangeTo?.let { append(dateFmt.format(Date(it))) }
+                            }
+                            item {
+                                InputChip(
+                                    selected     = true,
+                                    onClick      = { viewModel.setDateRange(null, null) },
+                                    label        = { Text(label) },
+                                    leadingIcon  = { Icon(Icons.Default.CalendarMonth, null, Modifier.size(16.dp)) },
+                                    trailingIcon = { Icon(Icons.Default.Close, "Clear", Modifier.size(16.dp)) },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            val displayed = state.displayedExpenses
+            if (displayed.isEmpty()) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        Text("No expenses yet.")
+                        Text(
+                            if (state.expenses.isEmpty()) "No expenses yet."
+                            else "No expenses match the current filter.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             } else {
-                items(state.expenses, key = { it.id }) { expense ->
+                items(displayed, key = { it.id }) { expense ->
                     ExpenseRow(
                         expense          = expense,
                         customCategories = state.customCategories,
@@ -225,8 +281,9 @@ fun ExpensesScreen(
 
 // ── Expense chart card ────────────────────────────────────────────────────────
 
-private data class ChartEntry(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val amount: Long)
+private data class ChartEntry(val label: String, val icon: ImageVector, val amount: Long, val categoryKey: String)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ExpenseChartCard(
     expenses: List<Expense>,
@@ -236,43 +293,95 @@ private fun ExpenseChartCard(
     selectedPeriod: ChartPeriod,
     selectedMemberId: String?,
     payrollStartDay: Int,
+    dateRangeFrom: Long?,
+    dateRangeTo: Long?,
+    selectedCategoryKey: String?,
     onPeriodChange: (ChartPeriod) -> Unit,
     onMemberChange: (String?) -> Unit,
+    onDateRangeChange: (Long?, Long?) -> Unit,
+    onCategorySelect: (String?) -> Unit,
 ) {
+    var showFromPicker by remember { mutableStateOf(false) }
+    var showToPicker   by remember { mutableStateOf(false) }
+    val fromPickerState = rememberDatePickerState(initialSelectedDateMillis = dateRangeFrom)
+    val toPickerState   = rememberDatePickerState(initialSelectedDateMillis = dateRangeTo)
+    val dateFmt = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+
+    val fromInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val toInteraction   = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val fromPressed by fromInteraction.collectIsPressedAsState()
+    val toPressed   by toInteraction.collectIsPressedAsState()
+    LaunchedEffect(fromPressed) { if (fromPressed) showFromPicker = true }
+    LaunchedEffect(toPressed)   { if (toPressed)   showToPicker   = true }
+
+    if (showFromPicker) {
+        DatePickerDialog(
+            onDismissRequest = { showFromPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDateRangeChange(fromPickerState.selectedDateMillis, dateRangeTo)
+                    showFromPicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showFromPicker = false }) { Text("Cancel") } },
+        ) { DatePicker(state = fromPickerState) }
+    }
+    if (showToPicker) {
+        DatePickerDialog(
+            onDismissRequest = { showToPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDateRangeChange(dateRangeFrom, toPickerState.selectedDateMillis)
+                    showToPicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showToPicker = false }) { Text("Cancel") } },
+        ) { DatePicker(state = toPickerState) }
+    }
+
+    val isCustomRange = dateRangeFrom != null || dateRangeTo != null
     val effectiveMemberId = if (currentUser?.role == Role.FATHER) selectedMemberId else currentUser?.id
+
     val filteredExpenses = expenses.filter { expense ->
-        if (effectiveMemberId != null) expense.paidBy == effectiveMemberId else true
-    }.filter { expense ->
-        val cutoff = if (selectedPeriod == ChartPeriod.WEEKLY) {
-            System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
-        } else {
-            val cal = Calendar.getInstance()
-            val today = cal.get(Calendar.DAY_OF_MONTH)
-            val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-            val effectiveDay = minOf(payrollStartDay, maxDay)
-            if (today < effectiveDay) {
-                cal.add(Calendar.MONTH, -1)
-                val prevMaxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-                cal.set(Calendar.DAY_OF_MONTH, minOf(payrollStartDay, prevMaxDay))
-            } else {
-                cal.set(Calendar.DAY_OF_MONTH, effectiveDay)
+        if (effectiveMemberId != null && expense.paidBy != effectiveMemberId) return@filter false
+        when {
+            isCustomRange -> {
+                val from = dateRangeFrom ?: Long.MIN_VALUE
+                val to   = dateRangeTo   ?: Long.MAX_VALUE
+                expense.expenseDate in from..to
             }
-            cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
-            cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
-            cal.timeInMillis
+            else -> {
+                val cutoff = if (selectedPeriod == ChartPeriod.WEEKLY) {
+                    System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
+                } else {
+                    val cal = Calendar.getInstance()
+                    val today = cal.get(Calendar.DAY_OF_MONTH)
+                    val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                    val effectiveDay = minOf(payrollStartDay, maxDay)
+                    if (today < effectiveDay) {
+                        cal.add(Calendar.MONTH, -1)
+                        val prevMaxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                        cal.set(Calendar.DAY_OF_MONTH, minOf(payrollStartDay, prevMaxDay))
+                    } else {
+                        cal.set(Calendar.DAY_OF_MONTH, effectiveDay)
+                    }
+                    cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
+                    cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+                    cal.timeInMillis
+                }
+                expense.expenseDate >= cutoff
+            }
         }
-        expense.expenseDate >= cutoff
     }
 
     // Group by custom-category ID if set, otherwise by built-in enum name.
-    // This ensures custom categories each get their own slice instead of
-    // being merged under their parent built-in category (e.g. "Other").
     val byCategory: List<ChartEntry> = filteredExpenses
         .groupBy { expense -> expense.customCategoryId ?: expense.category.name }
         .map { (key, group) ->
             val first = group.first()
             val label: String
-            val icon: androidx.compose.ui.graphics.vector.ImageVector
+            val icon: ImageVector
+            val categoryKey = first.customCategoryId ?: first.category.name
             if (first.customCategoryId != null) {
                 val cat = customCategories.find { it.id == first.customCategoryId }
                 label = cat?.name ?: first.category.displayName
@@ -281,7 +390,7 @@ private fun ExpenseChartCard(
                 label = first.category.displayName
                 icon  = expenseCategoryIcon(first.category)
             }
-            ChartEntry(label, icon, group.sumOf { it.amount })
+            ChartEntry(label, icon, group.sumOf { it.amount }, categoryKey)
         }
         .sortedByDescending { it.amount }
         .take(6)
@@ -293,6 +402,7 @@ private fun ExpenseChartCard(
 
     ElevatedCard(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
+            // ── Period & member filters ───────────────────────────────────
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -301,15 +411,51 @@ private fun ExpenseChartCard(
                 Text("Spending by category", style = MaterialTheme.typography.titleSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     FilterChip(
-                        selected = selectedPeriod == ChartPeriod.MONTHLY,
-                        onClick  = { onPeriodChange(ChartPeriod.MONTHLY) },
+                        selected = !isCustomRange && selectedPeriod == ChartPeriod.MONTHLY,
+                        onClick  = { onPeriodChange(ChartPeriod.MONTHLY); onDateRangeChange(null, null) },
                         label    = { Text("Month") },
                     )
                     FilterChip(
-                        selected = selectedPeriod == ChartPeriod.WEEKLY,
-                        onClick  = { onPeriodChange(ChartPeriod.WEEKLY) },
+                        selected = !isCustomRange && selectedPeriod == ChartPeriod.WEEKLY,
+                        onClick  = { onPeriodChange(ChartPeriod.WEEKLY); onDateRangeChange(null, null) },
                         label    = { Text("Week") },
                     )
+                }
+            }
+
+            // ── Custom date range row ─────────────────────────────────────
+            Spacer(Modifier.height(6.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value             = dateRangeFrom?.let { dateFmt.format(Date(it)) } ?: "",
+                    onValueChange     = {},
+                    readOnly          = true,
+                    label             = { Text("From") },
+                    placeholder       = { Text("Any") },
+                    trailingIcon      = { Icon(Icons.Default.CalendarMonth, null, Modifier.size(18.dp)) },
+                    modifier          = Modifier.weight(1f),
+                    singleLine        = true,
+                    interactionSource = fromInteraction,
+                )
+                OutlinedTextField(
+                    value             = dateRangeTo?.let { dateFmt.format(Date(it)) } ?: "",
+                    onValueChange     = {},
+                    readOnly          = true,
+                    label             = { Text("To") },
+                    placeholder       = { Text("Any") },
+                    trailingIcon      = { Icon(Icons.Default.CalendarMonth, null, Modifier.size(18.dp)) },
+                    modifier          = Modifier.weight(1f),
+                    singleLine        = true,
+                    interactionSource = toInteraction,
+                )
+                if (isCustomRange) {
+                    IconButton(onClick = { onDateRangeChange(null, null) }) {
+                        Icon(Icons.Default.Close, "Clear date range",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
 
@@ -342,7 +488,7 @@ private fun ExpenseChartCard(
                 }
             } else {
                 Box(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier         = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
                     val total = byCategory.sumOf { it.amount }.toFloat()
@@ -350,8 +496,11 @@ private fun ExpenseChartCard(
                         var startAngle = -90f
                         byCategory.forEachIndexed { i, entry ->
                             val sweep = (entry.amount.toFloat() / total) * 360f
+                            val isSelected = entry.categoryKey == selectedCategoryKey
                             drawArc(
-                                color      = barColors[i % barColors.size],
+                                color      = if (isSelected) barColors[i % barColors.size]
+                                             else barColors[i % barColors.size].copy(
+                                                 alpha = if (selectedCategoryKey != null) 0.4f else 1f),
                                 startAngle = startAngle,
                                 sweepAngle = sweep - 1f,
                                 useCenter  = true,
@@ -363,37 +512,75 @@ private fun ExpenseChartCard(
 
                 Spacer(Modifier.height(8.dp))
 
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // ── Legend rows — clickable to filter ───────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     val currFmt = NumberFormat.getCurrencyInstance(Locale("id", "ID"))
                     byCategory.forEachIndexed { i, entry ->
-                        Row(
-                            modifier          = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
+                        val isSelected = entry.categoryKey == selectedCategoryKey
+                        Surface(
+                            modifier  = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onCategorySelect(
+                                        if (isSelected) null else entry.categoryKey
+                                    )
+                                },
+                            shape     = MaterialTheme.shapes.small,
+                            color     = if (isSelected)
+                                            MaterialTheme.colorScheme.secondaryContainer
+                                        else
+                                            MaterialTheme.colorScheme.surface,
+                            tonalElevation = if (isSelected) 2.dp else 0.dp,
                         ) {
-                            Box(modifier = Modifier.size(12.dp)) {
-                                Canvas(modifier = Modifier.fillMaxSize()) {
-                                    drawRect(barColors[i % barColors.size])
+                            Row(
+                                modifier          = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(modifier = Modifier.size(12.dp)) {
+                                    Canvas(modifier = Modifier.fillMaxSize()) {
+                                        drawRect(barColors[i % barColors.size])
+                                    }
+                                }
+                                Spacer(Modifier.width(4.dp))
+                                Icon(
+                                    entry.icon, null,
+                                    modifier = Modifier.size(12.dp),
+                                    tint     = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    entry.label,
+                                    style    = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color    = if (isSelected)
+                                                   MaterialTheme.colorScheme.onSecondaryContainer
+                                               else
+                                                   MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    currFmt.format(entry.amount / 100.0),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (isSelected) {
+                                    Spacer(Modifier.width(4.dp))
+                                    Icon(
+                                        Icons.Default.FilterList, null,
+                                        modifier = Modifier.size(12.dp),
+                                        tint     = MaterialTheme.colorScheme.secondary,
+                                    )
                                 }
                             }
-                            Spacer(Modifier.width(4.dp))
-                            Icon(
-                                entry.icon, null,
-                                modifier = Modifier.size(12.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                entry.label,
-                                style    = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                currFmt.format(entry.amount / 100.0),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                        }
+                    }
+                    if (selectedCategoryKey != null) {
+                        TextButton(
+                            onClick  = { onCategorySelect(null) },
+                            modifier = Modifier.align(Alignment.End),
+                        ) {
+                            Text("Show all categories", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }

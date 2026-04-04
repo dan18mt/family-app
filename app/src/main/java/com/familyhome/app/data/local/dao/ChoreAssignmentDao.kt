@@ -28,6 +28,10 @@ interface ChoreAssignmentDao {
     @Query("DELETE FROM chore_assignments WHERE id = :id")
     suspend fun deleteAssignment(id: String)
 
+    /** One-shot (non-Flow) snapshot used for status-preserving merge during sync. */
+    @Query("SELECT * FROM chore_assignments")
+    suspend fun getAllAssignmentsOneShot(): List<ChoreAssignmentEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(assignments: List<ChoreAssignmentEntity>)
 }

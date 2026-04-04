@@ -17,6 +17,7 @@ import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.SyncPayload
 import com.familyhome.app.domain.model.User
 import com.familyhome.app.domain.repository.*
+import com.familyhome.app.domain.repository.PrayerRepository
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -45,6 +46,7 @@ class SyncServer @Inject constructor(
     private val budgetRepository: BudgetRepository,
     private val customStockCategoryRepository: CustomStockCategoryRepository,
     private val customExpenseCategoryRepository: CustomExpenseCategoryRepository,
+    private val prayerRepository: PrayerRepository,
     private val onboardingState: OnboardingState,
     private val notificationCenter: NotificationCenter,
     private val lowStockNotifier: LowStockNotifier,
@@ -101,6 +103,10 @@ class SyncServer @Inject constructor(
                 .map { CustomStockCategoryDto(it.id, it.name, it.iconName) },
             customExpenseCategories = customExpenseCategoryRepository.getAllCategories().first()
                 .map { CustomExpenseCategoryDto(it.id, it.name, it.iconName) },
+            prayerGoalSettings      = prayerRepository.getAllGoalSettings().first()
+                .map { PrayerGoalSettingDto(it.id, it.sunnahKey, it.isEnabled, it.assignedTo, it.createdBy, it.createdAt) },
+            prayerLogs              = prayerRepository.getLogsSince(0L).first()
+                .map { PrayerLogDto(it.id, it.userId, it.sunnahKey, it.epochDay, it.completedCount, it.loggedAt) },
             deletedUserIds          = deletionTracker.getDeletedUserIds().toList().ifEmpty { null },
             presenceMap             = presenceMap.ifEmpty { null },
             leaderId                = father?.id,
@@ -162,6 +168,16 @@ class SyncServer @Inject constructor(
         payload.customExpenseCategories?.let { dtos ->
             customExpenseCategoryRepository.upsertAll(
                 dtos.map { dto -> com.familyhome.app.domain.model.CustomExpenseCategory(dto.id, dto.name, dto.iconName) }
+            )
+        }
+        payload.prayerGoalSettings?.let { dtos ->
+            prayerRepository.upsertAllGoalSettings(
+                dtos.map { dto -> com.familyhome.app.domain.model.PrayerGoalSetting(dto.id, dto.sunnahKey, dto.isEnabled, dto.assignedTo, dto.createdBy, dto.createdAt) }
+            )
+        }
+        payload.prayerLogs?.let { dtos ->
+            prayerRepository.upsertAllLogs(
+                dtos.map { dto -> com.familyhome.app.domain.model.PrayerLog(dto.id, dto.userId, dto.sunnahKey, dto.epochDay, dto.completedCount, dto.loggedAt) }
             )
         }
     }

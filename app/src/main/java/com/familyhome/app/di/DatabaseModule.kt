@@ -8,6 +8,8 @@ import com.familyhome.app.data.local.dao.ChoreLogDao
 import com.familyhome.app.data.local.dao.CustomExpenseCategoryDao
 import com.familyhome.app.data.local.dao.CustomStockCategoryDao
 import com.familyhome.app.data.local.dao.ExpenseDao
+import com.familyhome.app.data.local.dao.PrayerGoalSettingDao
+import com.familyhome.app.data.local.dao.PrayerLogDao
 import com.familyhome.app.data.local.dao.RecurringTaskDao
 import com.familyhome.app.data.local.dao.StockItemDao
 import com.familyhome.app.data.local.dao.UserDao
@@ -26,7 +28,7 @@ object DatabaseModule {
     @Provides @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FamilyDatabase =
         Room.databaseBuilder(context, FamilyDatabase::class.java, FamilyDatabase.DATABASE_NAME)
-            .fallbackToDestructiveMigrationFrom(1, 2) // only wipe truly old DBs; new version bumps must have migrations
+            .fallbackToDestructiveMigrationFrom(1, 2, 3)
             .build()
 
     @Provides fun provideUserDao(db: FamilyDatabase):                       UserDao                    = db.userDao()
@@ -38,4 +40,6 @@ object DatabaseModule {
     @Provides fun provideBudgetDao(db: FamilyDatabase):                     BudgetDao                  = db.budgetDao()
     @Provides fun provideCustomExpenseCategoryDao(db: FamilyDatabase):      CustomExpenseCategoryDao   = db.customExpenseCategoryDao()
     @Provides fun provideCustomStockCategoryDao(db: FamilyDatabase):        CustomStockCategoryDao     = db.customStockCategoryDao()
+    @Provides fun providePrayerGoalSettingDao(db: FamilyDatabase):          PrayerGoalSettingDao       = db.prayerGoalSettingDao()
+    @Provides fun providePrayerLogDao(db: FamilyDatabase):                  PrayerLogDao               = db.prayerLogDao()
 }

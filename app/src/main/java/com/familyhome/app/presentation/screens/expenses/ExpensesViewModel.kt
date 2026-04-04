@@ -33,9 +33,38 @@ data class ExpensesUiState(
     val selectedChartPeriod: ChartPeriod                        = ChartPeriod.MONTHLY,
     val selectedMemberId: String?                               = null,
     val payrollStartDay: Int                                    = 1,
+    /** Inclusive start of custom date range; null = use selectedChartPeriod. */
+    val dateRangeFrom: Long?                                    = null,
+    /** Inclusive end of custom date range; null = use selectedChartPeriod. */
+    val dateRangeTo: Long?                                      = null,
+    /**
+     * Active category filter key. Matches [Expense.customCategoryId] for custom
+     * categories, or [ExpenseCategory.name] for built-in ones. null = all categories.
+     */
+    val selectedCategoryKey: String?                            = null,
     val isLoading: Boolean                                      = true,
     val error: String?                                          = null,
-)
+) {
+    /** Expenses visible in the list, filtered by date range and category. */
+    val displayedExpenses: List<Expense>
+        get() {
+            val from = dateRangeFrom
+            val to   = dateRangeTo
+            return expenses.filter { expense ->
+                val dateOk = when {
+                    from != null && to != null -> expense.expenseDate in from..to
+                    from != null               -> expense.expenseDate >= from
+                    to   != null               -> expense.expenseDate <= to
+                    else                       -> true
+                }
+                val catOk = selectedCategoryKey == null ||
+                    (expense.customCategoryId ?: expense.category.name) == selectedCategoryKey
+                dateOk && catOk
+            }
+        }
+
+    val isCustomDateRange: Boolean get() = dateRangeFrom != null || dateRangeTo != null
+}
 
 enum class ChartPeriod { MONTHLY, WEEKLY }
 
@@ -196,11 +225,20 @@ class ExpensesViewModel @Inject constructor(
     }
 
     fun setChartPeriod(period: ChartPeriod) {
-        _state.update { it.copy(selectedChartPeriod = period) }
+        // Switching period clears the custom date range
+        _state.update { it.copy(selectedChartPeriod = period, dateRangeFrom = null, dateRangeTo = null) }
     }
 
     fun setSelectedMember(userId: String?) {
         _state.update { it.copy(selectedMemberId = userId) }
+    }
+
+    fun setDateRange(from: Long?, to: Long?) {
+        _state.update { it.copy(dateRangeFrom = from, dateRangeTo = to) }
+    }
+
+    fun setSelectedCategory(categoryKey: String?) {
+        _state.update { it.copy(selectedCategoryKey = categoryKey) }
     }
 
     /** Persist and apply the new payroll start day (1–31). */

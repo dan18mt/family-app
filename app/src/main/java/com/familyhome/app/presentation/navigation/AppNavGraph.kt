@@ -9,8 +9,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.familyhome.app.presentation.screens.chat.ChatScreen
 import com.familyhome.app.presentation.screens.chores.ChoresScreen
+import com.familyhome.app.presentation.screens.prayer.PrayerScreen
 import com.familyhome.app.presentation.screens.expenses.ExpensesScreen
 import com.familyhome.app.presentation.screens.home.HomeScreen
 import com.familyhome.app.presentation.screens.login.LoginScreen
@@ -140,8 +140,8 @@ fun AppNavGraph(
             ExpensesScreen(onAddExpense = { navController.navigate(Screen.AddExpense.route) })
         }
 
-        composable(Screen.Chat.route) {
-            ChatScreen()
+        composable(Screen.Prayer.route) {
+            PrayerScreen()
         }
 
         // ── Settings ──────────────────────────────────────────────────────────

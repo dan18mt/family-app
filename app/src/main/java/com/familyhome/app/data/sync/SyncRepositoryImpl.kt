@@ -14,6 +14,7 @@ import com.familyhome.app.domain.model.CustomStockCategoryDto
 import com.familyhome.app.domain.model.SyncPayload
 import com.familyhome.app.domain.model.SyncResult
 import com.familyhome.app.domain.repository.*
+import com.familyhome.app.domain.repository.PrayerRepository
 import com.familyhome.app.domain.repository.SessionRepository
 import com.familyhome.app.util.dataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -35,6 +36,7 @@ class SyncRepositoryImpl @Inject constructor(
     private val budgetRepository: BudgetRepository,
     private val customStockCategoryRepository: CustomStockCategoryRepository,
     private val customExpenseCategoryRepository: CustomExpenseCategoryRepository,
+    private val prayerRepository: PrayerRepository,
     private val alarmScheduler: AlarmScheduler,
     private val sessionRepository: SessionRepository,
     private val lowStockNotifier: LowStockNotifier,
@@ -110,6 +112,10 @@ class SyncRepositoryImpl @Inject constructor(
                 .map { CustomStockCategoryDto(it.id, it.name, it.iconName) },
             customExpenseCategories = customExpenseCategoryRepository.getAllCategories().first()
                 .map { CustomExpenseCategoryDto(it.id, it.name, it.iconName) },
+            prayerGoalSettings = prayerRepository.getAllGoalSettings().first()
+                .map { com.familyhome.app.domain.model.PrayerGoalSettingDto(it.id, it.sunnahKey, it.isEnabled, it.assignedTo, it.createdBy, it.createdAt) },
+            prayerLogs = prayerRepository.getLogsSince(0L).first()
+                .map { com.familyhome.app.domain.model.PrayerLogDto(it.id, it.userId, it.sunnahKey, it.epochDay, it.completedCount, it.loggedAt) },
         )
     }
 
@@ -143,6 +149,16 @@ class SyncRepositoryImpl @Inject constructor(
         payload.customExpenseCategories?.let { dtos ->
             customExpenseCategoryRepository.upsertAll(
                 dtos.map { dto -> CustomExpenseCategory(dto.id, dto.name, dto.iconName) }
+            )
+        }
+        payload.prayerGoalSettings?.let { dtos ->
+            prayerRepository.upsertAllGoalSettings(
+                dtos.map { dto -> com.familyhome.app.domain.model.PrayerGoalSetting(dto.id, dto.sunnahKey, dto.isEnabled, dto.assignedTo, dto.createdBy, dto.createdAt) }
+            )
+        }
+        payload.prayerLogs?.let { dtos ->
+            prayerRepository.upsertAllLogs(
+                dtos.map { dto -> com.familyhome.app.domain.model.PrayerLog(dto.id, dto.userId, dto.sunnahKey, dto.epochDay, dto.completedCount, dto.loggedAt) }
             )
         }
 
