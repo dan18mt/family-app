@@ -12,6 +12,8 @@ import com.familyhome.app.domain.model.AppNotification
 import com.familyhome.app.domain.model.CustomExpenseCategoryDto
 import com.familyhome.app.domain.model.CustomStockCategory
 import com.familyhome.app.domain.model.CustomStockCategoryDto
+import com.familyhome.app.domain.model.PrayerGoalSettingDto
+import com.familyhome.app.domain.model.PrayerLogDto
 import com.familyhome.app.domain.model.NotificationType
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.SyncPayload

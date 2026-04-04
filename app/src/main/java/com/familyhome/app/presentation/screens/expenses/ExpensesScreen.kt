@@ -217,7 +217,7 @@ fun ExpensesScreen(
                                 .find { it.id == state.selectedCategoryKey }?.name
                                 ?: ExpenseCategory.entries
                                     .firstOrNull { it.name == state.selectedCategoryKey }?.displayName
-                                ?: state.selectedCategoryKey
+                                ?: state.selectedCategoryKey ?: ""
                             item {
                                 InputChip(
                                     selected     = true,
