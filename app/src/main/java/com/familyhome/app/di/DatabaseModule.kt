@@ -2,6 +2,8 @@ package com.familyhome.app.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.familyhome.app.data.local.dao.BudgetDao
 import com.familyhome.app.data.local.dao.ChoreAssignmentDao
 import com.familyhome.app.data.local.dao.ChoreLogDao
@@ -25,10 +27,42 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
+    private val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `prayer_goal_settings` (
+                    `id` TEXT NOT NULL,
+                    `sunnahKey` TEXT NOT NULL,
+                    `isEnabled` INTEGER NOT NULL,
+                    `assignedTo` TEXT,
+                    `createdBy` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+            """.trimIndent())
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `prayer_logs` (
+                    `id` TEXT NOT NULL,
+                    `userId` TEXT NOT NULL,
+                    `sunnahKey` TEXT NOT NULL,
+                    `epochDay` INTEGER NOT NULL,
+                    `completedCount` INTEGER NOT NULL,
+                    `loggedAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+            """.trimIndent())
+            db.execSQL("""
+                CREATE UNIQUE INDEX IF NOT EXISTS `index_prayer_logs_userId_sunnahKey_epochDay`
+                ON `prayer_logs` (`userId`, `sunnahKey`, `epochDay`)
+            """.trimIndent())
+        }
+    }
+
     @Provides @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FamilyDatabase =
         Room.databaseBuilder(context, FamilyDatabase::class.java, FamilyDatabase.DATABASE_NAME)
-            .fallbackToDestructiveMigrationFrom(1, 2, 3)
+            .fallbackToDestructiveMigrationFrom(1, 2)
+            .addMigrations(MIGRATION_3_4)
             .build()
 
     @Provides fun provideUserDao(db: FamilyDatabase):                       UserDao                    = db.userDao()
