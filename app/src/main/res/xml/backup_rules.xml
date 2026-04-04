@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- Exclude the local DB and DataStore from cloud backup (family data is local-only) -->
-    <exclude domain="database" path="family_home.db" />
-    <exclude domain="sharedpref" path="." />
+    <!-- Include the DB and DataStore so data survives app updates and device restores.
+         Android 9+ encrypts backups with the user's Google account key before upload. -->
+    <include domain="database" path="family_home.db" />
+    <include domain="file" path="datastore" />
 </full-backup-content>
