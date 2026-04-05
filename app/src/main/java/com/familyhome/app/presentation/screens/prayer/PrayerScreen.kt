@@ -313,6 +313,7 @@ private fun DailySummaryCard(completed: Int, total: Int) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GoalProgressCard(
     sunnah: SunnahGoal,
@@ -324,6 +325,8 @@ private fun GoalProgressCard(
     onLog: () -> Unit,
     onUndo: () -> Unit,
 ) {
+    var showHadithSheet by remember { mutableStateOf(false) }
+
     Card(
         modifier  = Modifier
             .fillMaxWidth()
@@ -364,6 +367,19 @@ private fun GoalProgressCard(
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Hadith / reward info button
+                    IconButton(
+                        onClick  = { showHadithSheet = true },
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.MenuBook,
+                            contentDescription = "View hadith",
+                            tint     = PrayerGreenLight.copy(alpha = 0.8f),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+
                     if (completedCount > 0) {
                         OutlinedIconButton(
                             onClick  = onUndo,
@@ -387,26 +403,20 @@ private fun GoalProgressCard(
                 }
             }
 
-            // Hadith snippet
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "\"${sunnah.hadith.take(120)}${if (sunnah.hadith.length > 120) "…" else ""}\"",
-                style    = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
-                color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(sunnah.source, style = MaterialTheme.typography.labelSmall, color = PrayerGreenLight)
-
-            // Achievement reward badge (shown when goal is completed)
-            AnimatedVisibility(visible = isCompleted, enter = fadeIn(), exit = fadeOut()) {
-                RewardBadge(sunnah = sunnah, langTag = langTag)
-            }
-
             // 7-day streak dots
             Spacer(Modifier.height(10.dp))
             WeekStreak(weekLogs = weekLogs)
         }
+    }
+
+    // Hadith + reward bottom sheet
+    if (showHadithSheet) {
+        HadithBottomSheet(
+            sunnah      = sunnah,
+            langTag     = langTag,
+            isCompleted = isCompleted,
+            onDismiss   = { showHadithSheet = false },
+        )
     }
 }
 
@@ -483,6 +493,131 @@ private fun RewardBadge(sunnah: SunnahGoal, langTag: String) {
             color      = PrayerGold,
             fontWeight = FontWeight.SemiBold,
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HadithBottomSheet(
+    sunnah: SunnahGoal,
+    langTag: String,
+    isCompleted: Boolean,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest  = onDismiss,
+        containerColor    = MaterialTheme.colorScheme.surface,
+        dragHandle        = { BottomSheetDefaults.DragHandle() },
+    ) {
+        Column(
+            modifier            = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            // Title
+            Text(
+                "${sunnah.rewardIcon}  ${sunnah.localizedTitle(langTag)}",
+                style      = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+
+            // Reward banner — always shown
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(PrayerGold.copy(alpha = 0.12f))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(sunnah.rewardIcon, fontSize = 22.sp)
+                Column {
+                    Text(
+                        if (langTag == "en") "Reward" else "Pahala",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = PrayerGold.copy(alpha = 0.7f),
+                    )
+                    Text(
+                        sunnah.localizedReward(langTag),
+                        style      = MaterialTheme.typography.bodyMedium,
+                        color      = PrayerGold,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+
+            // Completed indicator
+            if (isCompleted) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(PrayerGreen.copy(alpha = 0.08f))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        tint     = PrayerGreenLight,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        if (langTag == "en") "Completed today — reward earned!" else "Sudah selesai hari ini — pahala diraih!",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = PrayerGreenLight,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+
+            HorizontalDivider(thickness = 0.5.dp)
+
+            // Full hadith
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    if (langTag == "en") "Hadith" else "Dalil",
+                    style      = MaterialTheme.typography.labelMedium,
+                    color      = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "\"${sunnah.hadith}\"",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "— ${sunnah.source}",
+                    style      = MaterialTheme.typography.labelMedium,
+                    color      = PrayerGreenLight,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+
+            // Reminder time window (if applicable)
+            sunnah.reminderWindowLabel()?.let { window ->
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Schedule,
+                        contentDescription = null,
+                        tint     = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        "${if (langTag == "en") "Time window" else "Waktu"}: $window",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
     }
 }
 
