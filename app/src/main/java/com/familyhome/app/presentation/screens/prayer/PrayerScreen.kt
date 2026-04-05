@@ -182,8 +182,8 @@ private fun TodayTab(
             DailySummaryCard(completed = completedCount, total = totalCount)
         }
         item { SectionHeader(stringResource(R.string.prayer_today_goals)) }
-        val langTag = LocalContext.current.resources.configuration.locales[0].language
         items(activeGoals, key = { it.id }) { goal ->
+            val langTag = LocalContext.current.resources.configuration.locales[0].language
             val log = state.todayLogFor(goal.sunnahKey, userId)
             val sunnah = goal.sunnah
             if (sunnah != null) {
