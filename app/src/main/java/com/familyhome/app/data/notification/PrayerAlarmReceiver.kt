@@ -12,8 +12,8 @@ import com.familyhome.app.MainActivity
 import com.familyhome.app.R
 import com.familyhome.app.domain.model.SunnahGoal
 import dagger.hilt.EntryPoint
-import dagger.hilt.EntryPointAccessors
 import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 
 @EntryPoint

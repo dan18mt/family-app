@@ -229,4 +229,5 @@ private fun notificationStyle(type: NotificationType): Pair<ImageVector, Color> 
     NotificationType.CHORE_REMINDER  -> Icons.Default.NotificationImportant to MaterialTheme.colorScheme.surfaceBright
     NotificationType.CHORE_OVERDUE   -> Icons.Default.CrisisAlert           to MaterialTheme.colorScheme.errorContainer
     NotificationType.LOW_STOCK       -> Icons.Default.CrisisAlert           to MaterialTheme.colorScheme.error
+    NotificationType.PRAYER_REMINDER -> Icons.Default.NotificationsActive   to Color(0xFF2D6A4F)
 }
