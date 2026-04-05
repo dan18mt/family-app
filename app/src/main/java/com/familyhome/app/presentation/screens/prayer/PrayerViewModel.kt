@@ -2,6 +2,7 @@ package com.familyhome.app.presentation.screens.prayer
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.familyhome.app.data.notification.PrayerReminderScheduler
 import com.familyhome.app.data.sync.DeletionTracker
 import com.familyhome.app.domain.model.PrayerGoalSetting
 import com.familyhome.app.domain.model.PrayerLog
@@ -22,27 +23,70 @@ import javax.inject.Inject
 data class PrayerUiState(
     val goalSettings: List<PrayerGoalSetting> = emptyList(),
     val todayLogs: List<PrayerLog> = emptyList(),
-    val weekLogs: List<PrayerLog> = emptyList(),
+    /** 30 days of logs for all users — used for weekly bar chart, monthly heatmap, and streaks. */
+    val monthLogs: List<PrayerLog> = emptyList(),
     val currentUser: User? = null,
     val allUsers: List<User> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
 ) {
-    // Active goals are enabled settings assigned to current user (or to all)
-    fun activeGoalsFor(userId: String): List<PrayerGoalSetting> =
-        goalSettings.filter { it.isEnabled && (it.assignedTo == null || it.assignedTo == userId) }
+    // ── Active goals ─────────────────────────────────────────────────────────
 
-    // Today's log for a specific sunnah and user
+    fun activeGoalsFor(userId: String): List<PrayerGoalSetting> =
+        goalSettings.filter { it.isEnabled && it.isAssignedTo(userId) }
+
+    // ── Log helpers ──────────────────────────────────────────────────────────
+
     fun todayLogFor(sunnahKey: String, userId: String): PrayerLog? =
         todayLogs.firstOrNull { it.sunnahKey == sunnahKey && it.userId == userId }
 
-    // Number of completed goals for a user today
-    fun completedTodayCount(userId: String): Int {
-        val active = activeGoalsFor(userId)
-        return active.count { goal ->
-            val log = todayLogFor(goal.sunnahKey, userId)
-            log?.isCompleted == true
+    fun completedTodayCount(userId: String): Int =
+        activeGoalsFor(userId).count { goal ->
+            todayLogFor(goal.sunnahKey, userId)?.isCompleted == true
         }
+
+    // ── Derived week logs (last 7 days from monthLogs) ───────────────────────
+
+    val weekLogs: List<PrayerLog>
+        get() {
+            val today = System.currentTimeMillis() / DAY_MS
+            return monthLogs.filter { it.epochDay >= today - 6 }
+        }
+
+    // ── Stats helpers ────────────────────────────────────────────────────────
+
+    /**
+     * Completion rate (0.0–1.0) for [userId] on [epochDay].
+     * Returns 0 if there are no active goals on that day.
+     */
+    fun dailyCompletionRate(userId: String, epochDay: Long): Float {
+        val active = activeGoalsFor(userId)
+        if (active.isEmpty()) return 0f
+        val completed = active.count { goal ->
+            monthLogs.firstOrNull {
+                it.sunnahKey == goal.sunnahKey && it.userId == userId && it.epochDay == epochDay
+            }?.isCompleted == true
+        }
+        return completed.toFloat() / active.size
+    }
+
+    /**
+     * Current streak (consecutive completed days up to today) for [userId] / [sunnahKey].
+     * Checks up to 30 days back (month window).
+     */
+    fun streakFor(sunnahKey: String, userId: String): Int {
+        val today = System.currentTimeMillis() / DAY_MS
+        var streak = 0
+        var day = today
+        while (day >= today - 29) {
+            val done = monthLogs.any { it.sunnahKey == sunnahKey && it.userId == userId && it.epochDay == day && it.isCompleted }
+            if (done) { streak++; day-- } else break
+        }
+        return streak
+    }
+
+    companion object {
+        private const val DAY_MS = 24 * 60 * 60 * 1000L
     }
 }
 
@@ -52,13 +96,15 @@ class PrayerViewModel @Inject constructor(
     private val getCurrentUserUseCase: GetCurrentUserUseCase,
     private val getFamilyMembersUseCase: GetFamilyMembersUseCase,
     private val deletionTracker: DeletionTracker,
+    private val reminderScheduler: PrayerReminderScheduler,
 ) : ViewModel() {
+
     private val _state = MutableStateFlow(PrayerUiState())
     val state = _state.asStateFlow()
 
     init {
-        // Load currentUser first, then start collecting goals so isLoading=false
-        // is only emitted once we know who the current user is (fixes Today tab for leader).
+        // Load current user first, then stream goals so isLoading becomes false only when we
+        // know who the user is — avoids flash of empty state for the leader.
         viewModelScope.launch {
             val user = getCurrentUserUseCase()
             _state.update { it.copy(currentUser = user) }
@@ -72,85 +118,130 @@ class PrayerViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            val todayEpoch = todayEpochDay()
-            prayerRepository.getLogsForDay(todayEpoch).collect { logs ->
+            prayerRepository.getLogsForDay(todayEpochDay()).collect { logs ->
                 _state.update { it.copy(todayLogs = logs) }
             }
         }
+        // 30 days covers weekly chart + monthly heatmap + streak calculations
         viewModelScope.launch {
-            val weekAgo = todayEpochDay() - 6L
-            prayerRepository.getLogsSince(weekAgo).collect { logs ->
-                _state.update { it.copy(weekLogs = logs) }
+            val monthAgo = todayEpochDay() - 29L
+            prayerRepository.getLogsSince(monthAgo).collect { logs ->
+                _state.update { it.copy(monthLogs = logs) }
             }
         }
     }
 
-    /** Log or increment today's completion for the current user. */
+    // ── Logging ──────────────────────────────────────────────────────────────
+
+    /** Increment today's completion count for the current user (capped at dailyTarget). */
     fun logPrayer(sunnahKey: String) {
-        val user = _state.value.currentUser ?: return
+        val user   = _state.value.currentUser ?: return
         val sunnah = SunnahGoal.entries.firstOrNull { it.name == sunnahKey } ?: return
-        val today = todayEpochDay()
+        val today  = todayEpochDay()
         val existing = _state.value.todayLogFor(sunnahKey, user.id)
         viewModelScope.launch {
-            val newCount = ((existing?.completedCount ?: 0) + 1).coerceAtMost(sunnah.dailyTarget)
             prayerRepository.upsertLog(
                 PrayerLog(
                     id             = existing?.id ?: UUID.randomUUID().toString(),
                     userId         = user.id,
                     sunnahKey      = sunnahKey,
                     epochDay       = today,
-                    completedCount = newCount,
+                    completedCount = ((existing?.completedCount ?: 0) + 1).coerceAtMost(sunnah.dailyTarget),
                     loggedAt       = System.currentTimeMillis(),
                 )
             )
         }
     }
 
-    /** Undo / decrement today's completion. */
+    /** Decrement today's completion count (minimum 0). */
     fun undoPrayer(sunnahKey: String) {
-        val user = _state.value.currentUser ?: return
+        val user     = _state.value.currentUser ?: return
         val existing = _state.value.todayLogFor(sunnahKey, user.id) ?: return
         viewModelScope.launch {
-            val newCount = (existing.completedCount - 1).coerceAtLeast(0)
-            prayerRepository.upsertLog(existing.copy(completedCount = newCount, loggedAt = System.currentTimeMillis()))
+            prayerRepository.upsertLog(
+                existing.copy(
+                    completedCount = (existing.completedCount - 1).coerceAtLeast(0),
+                    loggedAt       = System.currentTimeMillis(),
+                )
+            )
         }
     }
 
-    /** Enable or disable a sunnah goal (leader only). */
+    // ── Goal management (leader only) ────────────────────────────────────────
+
+    /** Enable or disable a sunnah goal. */
     fun toggleGoal(setting: PrayerGoalSetting) {
         viewModelScope.launch {
             prayerRepository.updateGoalSetting(setting.copy(isEnabled = !setting.isEnabled))
         }
     }
 
-    /** Add a new goal for a sunnah (leader only). assignedTo=null means all family. */
-    fun addGoal(sunnahKey: String, assignedTo: String?) {
+    /**
+     * Add a new goal for [sunnahKey].
+     * [assignedUserIds] = null → all family. Single-element list → specific member.
+     */
+    fun addGoal(sunnahKey: String, assignedUserIds: List<String>?) {
         val user = _state.value.currentUser ?: return
-        // Check if already exists
         if (_state.value.goalSettings.any { it.sunnahKey == sunnahKey }) return
         viewModelScope.launch {
             prayerRepository.insertGoalSetting(
                 PrayerGoalSetting(
-                    id         = UUID.randomUUID().toString(),
-                    sunnahKey  = sunnahKey,
-                    isEnabled  = true,
-                    assignedTo = assignedTo,
-                    createdBy  = user.id,
-                    createdAt  = System.currentTimeMillis(),
+                    id              = UUID.randomUUID().toString(),
+                    sunnahKey       = sunnahKey,
+                    isEnabled       = true,
+                    assignedUserIds = assignedUserIds,
+                    reminderEnabled = false,
+                    createdBy       = user.id,
+                    createdAt       = System.currentTimeMillis(),
                 )
             )
         }
     }
 
-    /** Remove a goal (leader only). Records the deletion so it propagates to member devices on sync. */
+    /**
+     * Add [newUserId] to the goal's assigned list.
+     * No-op if the user is already assigned or the goal is assigned to all (null).
+     */
+    fun addAssigneeToGoal(goalId: String, newUserId: String) {
+        val setting = _state.value.goalSettings.firstOrNull { it.id == goalId } ?: return
+        if (setting.assignedUserIds == null) return // already "all family"
+        if (newUserId in setting.assignedUserIds) return // already assigned
+        val updated = setting.copy(
+            assignedUserIds = setting.assignedUserIds + newUserId,
+        )
+        viewModelScope.launch { prayerRepository.updateGoalSetting(updated) }
+    }
+
+    /**
+     * Toggle the daily reminder for a goal. Only has effect if the sunnah has a [SunnahGoal.reminderHour].
+     */
+    fun toggleReminder(setting: PrayerGoalSetting) {
+        val sunnah = setting.sunnah ?: return
+        val newEnabled = !setting.reminderEnabled
+        viewModelScope.launch {
+            prayerRepository.updateGoalSetting(setting.copy(reminderEnabled = newEnabled))
+        }
+        // Schedule or cancel the alarm
+        val hour = sunnah.reminderHour ?: return
+        if (newEnabled) {
+            reminderScheduler.schedule(setting.sunnahKey, hour, sunnah.reminderMinute ?: 0)
+        } else {
+            reminderScheduler.cancel(setting.sunnahKey)
+        }
+    }
+
+    /** Delete a goal (leader only). Records deletion so it propagates via sync. */
     fun removeGoal(setting: PrayerGoalSetting) {
         viewModelScope.launch {
             prayerRepository.deleteGoalSetting(setting.id)
             deletionTracker.recordPrayerGoalDeletion(setting.id)
+            reminderScheduler.cancel(setting.sunnahKey)
         }
     }
 
     fun clearError() = _state.update { it.copy(error = null) }
+
+    // ── Utilities ────────────────────────────────────────────────────────────
 
     private fun todayEpochDay(): Long {
         val cal = Calendar.getInstance()

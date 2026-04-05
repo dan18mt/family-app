@@ -113,7 +113,12 @@ class SyncRepositoryImpl @Inject constructor(
             customExpenseCategories = customExpenseCategoryRepository.getAllCategories().first()
                 .map { CustomExpenseCategoryDto(it.id, it.name, it.iconName) },
             prayerGoalSettings = prayerRepository.getAllGoalSettings().first()
-                .map { com.familyhome.app.domain.model.PrayerGoalSettingDto(it.id, it.sunnahKey, it.isEnabled, it.assignedTo, it.createdBy, it.createdAt) },
+                .map { com.familyhome.app.domain.model.PrayerGoalSettingDto(
+                    id = it.id, sunnahKey = it.sunnahKey, isEnabled = it.isEnabled,
+                    assignedTo = it.assignedUserIds?.joinToString(","),
+                    createdBy = it.createdBy, createdAt = it.createdAt,
+                    reminderEnabled = it.reminderEnabled,
+                ) },
             prayerLogs = prayerRepository.getLogsSince(0L).first()
                 .map { com.familyhome.app.domain.model.PrayerLogDto(it.id, it.userId, it.sunnahKey, it.epochDay, it.completedCount, it.loggedAt) },
             deletedPrayerGoalIds = deletionTracker.getDeletedPrayerGoalIds().toList().ifEmpty { null },
@@ -167,7 +172,13 @@ class SyncRepositoryImpl @Inject constructor(
                 prayerRepository.upsertAllGoalSettings(
                     toUpsert.map { dto ->
                         com.familyhome.app.domain.model.PrayerGoalSetting(
-                            dto.id, dto.sunnahKey, dto.isEnabled, dto.assignedTo, dto.createdBy, dto.createdAt
+                            id              = dto.id,
+                            sunnahKey       = dto.sunnahKey,
+                            isEnabled       = dto.isEnabled,
+                            assignedUserIds = dto.assignedTo?.split(",")?.filter { it.isNotBlank() },
+                            reminderEnabled = dto.reminderEnabled,
+                            createdBy       = dto.createdBy,
+                            createdAt       = dto.createdAt,
                         )
                     }
                 )

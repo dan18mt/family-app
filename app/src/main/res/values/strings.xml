@@ -61,21 +61,51 @@
     <string name="home_offline">Offline</string>
     <string name="home_see_all">See all %1$d items</string>
 
-    <!-- Prayer screen -->
+    <!-- Prayer screen — existing -->
     <string name="prayer_title">Ibadah Tracker</string>
     <string name="prayer_subtitle">Establish family prayer habits</string>
     <string name="prayer_tab_today">Today</string>
+    <string name="prayer_tab_family">Family</string>
     <string name="prayer_tab_manage">Manage Goals</string>
     <string name="prayer_today_progress">Today\'s Progress</string>
-    <string name="prayer_all_done">MashaAllah! All goals completed today!</string>
+    <string name="prayer_all_done">MashaAllah! All goals completed! 🏆</string>
     <string name="prayer_no_goals">No goals set yet</string>
     <string name="prayer_no_goals_hint">Ask your family leader to add sunnah goals</string>
+    <string name="prayer_no_goals_manage_hint">Tap the + button to add your first sunnah goal</string>
     <string name="prayer_add_goal">Add Sunnah Goal</string>
+    <string name="prayer_add_goal_btn">Add Goal</string>
     <string name="prayer_assigned_to">Assigned to: %1$s</string>
     <string name="prayer_all_family">All family members</string>
     <string name="prayer_active_goals">Active Goals</string>
     <string name="prayer_no_goals_manage">No goals added yet. Tap + to add a sunnah goal for your family.</string>
     <string name="prayer_today_goals">Today\'s Goals</string>
+    <string name="prayer_goals_remaining">%1$d goal(s) remaining</string>
+    <string name="prayer_assign_to">Assign to</string>
+    <string name="prayer_all_added">All sunnah goals already added</string>
+
+    <!-- Prayer screen — stats &amp; charts -->
+    <string name="prayer_family_today">Family Today</string>
+    <string name="prayer_my_weekly">My Weekly Progress</string>
+    <string name="prayer_my_monthly">Monthly Overview</string>
+    <string name="prayer_last_30_days">Last 30 days</string>
+    <string name="prayer_me">Me</string>
+    <string name="prayer_legend_none">None</string>
+    <string name="prayer_legend_partial">Partial</string>
+    <string name="prayer_legend_complete">Complete</string>
+
+    <!-- Prayer screen — achievements -->
+    <string name="prayer_achievements_today">Achievements Today</string>
+    <string name="prayer_achievements_subtitle">Rewards earned from today\'s completed goals</string>
+
+    <!-- Prayer screen — reminders -->
+    <string name="prayer_reminder_on">Reminder On</string>
+    <string name="prayer_reminder_off">Reminder Off</string>
+
+    <!-- Prayer screen — assignment -->
+    <string name="prayer_assigned_to_label">Assigned to:</string>
+    <string name="prayer_add_member">Add Member</string>
+    <string name="prayer_add_member_title">Assign to Another Member</string>
+    <string name="prayer_all_assigned">All family members are already assigned to this goal.</string>
 
     <!-- Expenses screen -->
     <string name="expenses_this_month">This month</string>

@@ -19,7 +19,7 @@ import com.familyhome.app.data.local.entity.*
         PrayerGoalSettingEntity::class,
         PrayerLogEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class FamilyDatabase : RoomDatabase() {

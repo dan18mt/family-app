@@ -50,21 +50,39 @@ class PrayerRepositoryImpl @Inject constructor(
 // ── Mappers ────────────────────────────────────────────────────────────────────
 
 private fun PrayerGoalSettingEntity.toDomain() = PrayerGoalSetting(
-    id = id, sunnahKey = sunnahKey, isEnabled = isEnabled,
-    assignedTo = assignedTo, createdBy = createdBy, createdAt = createdAt,
+    id              = id,
+    sunnahKey       = sunnahKey,
+    isEnabled       = isEnabled,
+    assignedUserIds = assignedTo?.split(",")?.filter { it.isNotBlank() },
+    reminderEnabled = reminderEnabled,
+    createdBy       = createdBy,
+    createdAt       = createdAt,
 )
 
 private fun PrayerGoalSetting.toEntity() = PrayerGoalSettingEntity(
-    id = id, sunnahKey = sunnahKey, isEnabled = isEnabled,
-    assignedTo = assignedTo, createdBy = createdBy, createdAt = createdAt,
+    id              = id,
+    sunnahKey       = sunnahKey,
+    isEnabled       = isEnabled,
+    assignedTo      = assignedUserIds?.joinToString(","),
+    reminderEnabled = reminderEnabled,
+    createdBy       = createdBy,
+    createdAt       = createdAt,
 )
 
 private fun PrayerLogEntity.toDomain() = PrayerLog(
-    id = id, userId = userId, sunnahKey = sunnahKey,
-    epochDay = epochDay, completedCount = completedCount, loggedAt = loggedAt,
+    id             = id,
+    userId         = userId,
+    sunnahKey      = sunnahKey,
+    epochDay       = epochDay,
+    completedCount = completedCount,
+    loggedAt       = loggedAt,
 )
 
 private fun PrayerLog.toEntity() = PrayerLogEntity(
-    id = id, userId = userId, sunnahKey = sunnahKey,
-    epochDay = epochDay, completedCount = completedCount, loggedAt = loggedAt,
+    id             = id,
+    userId         = userId,
+    sunnahKey      = sunnahKey,
+    epochDay       = epochDay,
+    completedCount = completedCount,
+    loggedAt       = loggedAt,
 )

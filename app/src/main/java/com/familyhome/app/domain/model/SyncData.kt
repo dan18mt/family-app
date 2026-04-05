@@ -82,7 +82,9 @@ data class SyncPayload(
 
 @Serializable data class PrayerGoalSettingDto(
     val id: String, val sunnahKey: String, val isEnabled: Boolean,
+    /** Comma-separated user IDs, or null for "all family". Backward-compatible with single IDs. */
     val assignedTo: String?, val createdBy: String, val createdAt: Long,
+    val reminderEnabled: Boolean = false,
 )
 
 @Serializable data class PrayerLogDto(

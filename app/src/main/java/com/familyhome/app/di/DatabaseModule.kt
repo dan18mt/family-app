@@ -27,6 +27,13 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
+    private val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Add reminderEnabled column; default 0 (false) preserves existing data
+            db.execSQL("ALTER TABLE prayer_goal_settings ADD COLUMN reminderEnabled INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
     private val MIGRATION_3_4 = object : Migration(3, 4) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("""
@@ -62,7 +69,7 @@ object DatabaseModule {
     fun provideDatabase(@ApplicationContext context: Context): FamilyDatabase =
         Room.databaseBuilder(context, FamilyDatabase::class.java, FamilyDatabase.DATABASE_NAME)
             .fallbackToDestructiveMigrationFrom(1, 2)
-            .addMigrations(MIGRATION_3_4)
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
             .build()
 
     @Provides fun provideUserDao(db: FamilyDatabase):                       UserDao                    = db.userDao()

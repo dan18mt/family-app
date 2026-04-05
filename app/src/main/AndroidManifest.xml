@@ -74,6 +74,11 @@
             </intent-filter>
         </receiver>
 
+        <!-- Prayer alarm receiver — fires daily sunnah reminder notifications -->
+        <receiver
+            android:name=".data.notification.PrayerAlarmReceiver"
+            android:exported="false" />
+
         <!-- Background service for networking, sync, and NSD discovery -->
         <service
             android:name=".data.service.FamilyBackgroundService"
