@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.familyhome.app.data.notification.PrayerReminderScheduler
 import com.familyhome.app.data.sync.DeletionTracker
+import com.familyhome.app.data.sync.PrayerReminderStore
+import com.familyhome.app.domain.model.PrayerReminderDto
 import com.familyhome.app.domain.model.PrayerGoalSetting
 import com.familyhome.app.domain.model.PrayerLog
 import com.familyhome.app.domain.model.SunnahGoal
@@ -29,6 +31,8 @@ data class PrayerUiState(
     val allUsers: List<User> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
+    /** Non-null briefly after sending a reminder — consumed by the UI to show a Snackbar. */
+    val reminderSentTo: String? = null,
 ) {
     // ── Active goals ─────────────────────────────────────────────────────────
 
@@ -97,6 +101,7 @@ class PrayerViewModel @Inject constructor(
     private val getFamilyMembersUseCase: GetFamilyMembersUseCase,
     private val deletionTracker: DeletionTracker,
     private val reminderScheduler: PrayerReminderScheduler,
+    private val prayerReminderStore: PrayerReminderStore,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(PrayerUiState())
@@ -238,6 +243,28 @@ class PrayerViewModel @Inject constructor(
             reminderScheduler.cancel(setting.sunnahKey)
         }
     }
+
+    /**
+     * Queue a reminder to [targetUserId] notifying them to complete their ibadah.
+     * The reminder is distributed to the target device on the next sync cycle.
+     */
+    fun sendReminder(targetUserId: String, targetUserName: String) {
+        val sender = _state.value.currentUser ?: return
+        viewModelScope.launch {
+            prayerReminderStore.addReminder(
+                PrayerReminderDto(
+                    id           = UUID.randomUUID().toString(),
+                    targetUserId = targetUserId,
+                    sentByUserId = sender.id,
+                    sentByName   = sender.name,
+                    sentAt       = System.currentTimeMillis(),
+                )
+            )
+            _state.update { it.copy(reminderSentTo = targetUserName) }
+        }
+    }
+
+    fun clearReminderSent() = _state.update { it.copy(reminderSentTo = null) }
 
     fun clearError() = _state.update { it.copy(error = null) }
 

@@ -42,6 +42,7 @@ class SyncRepositoryImpl @Inject constructor(
     private val lowStockNotifier: LowStockNotifier,
     private val presenceTracker: MemberPresenceTracker,
     private val deletionTracker: DeletionTracker,
+    private val prayerReminderStore: PrayerReminderStore,
 ) {
     private val lastSyncKey = longPreferencesKey("last_sync_time")
     private val hostIpKey   = stringPreferencesKey("sync_host_ip")
@@ -122,6 +123,7 @@ class SyncRepositoryImpl @Inject constructor(
             prayerLogs = prayerRepository.getLogsSince(0L).first()
                 .map { com.familyhome.app.domain.model.PrayerLogDto(it.id, it.userId, it.sunnahKey, it.epochDay, it.completedCount, it.loggedAt) },
             deletedPrayerGoalIds = deletionTracker.getDeletedPrayerGoalIds().toList().ifEmpty { null },
+            prayerReminders      = prayerReminderStore.getActiveReminders().ifEmpty { null },
         )
     }
 
@@ -215,6 +217,15 @@ class SyncRepositoryImpl @Inject constructor(
         // 5. Low stock notifications
         payload.stockItems?.let { dtos ->
             dtos.map { it.toDomain() }.forEach { item -> lowStockNotifier.notifyIfLow(item) }
+        }
+
+        // 6. Family prayer reminders — merge received reminders and notify if targeted at this user
+        payload.prayerReminders?.let { reminders ->
+            prayerReminderStore.mergeReminders(reminders)
+            val currentUserId = sessionRepository.getCurrentUserId()
+            if (currentUserId != null) {
+                prayerReminderStore.processForCurrentUser(currentUserId)
+            }
         }
     }
 }

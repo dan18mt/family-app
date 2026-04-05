@@ -22,6 +22,8 @@ data class SyncPayload(
     val deletedUserIds: List<String>? = null,
     /** Prayer-goal IDs deleted by the leader; members must remove these locally. */
     val deletedPrayerGoalIds: List<String>? = null,
+    /** Family-sent prayer reminders; distributed via the leader's server to all clients. */
+    val prayerReminders: List<PrayerReminderDto>? = null,
     /** userId → last-seen epoch-ms map; used to propagate presence to all devices. */
     val presenceMap: Map<String, Long>? = null,
     /** ID of the family leader (Father); included in pull responses. */
@@ -78,6 +80,19 @@ data class SyncPayload(
 @Serializable data class BudgetDto(
     val id: String, val targetUserId: String?, val category: String?,
     val limitAmount: Long, val period: String, val setBy: String,
+)
+
+/**
+ * A prayer reminder sent by one family member to another.
+ * Distributed through the sync server so it reaches the target device on next pull.
+ * Expires after 24 hours — the receiver shows it once and marks it seen.
+ */
+@Serializable data class PrayerReminderDto(
+    val id: String,
+    val targetUserId: String,
+    val sentByUserId: String,
+    val sentByName: String,
+    val sentAt: Long,
 )
 
 @Serializable data class PrayerGoalSettingDto(

@@ -70,10 +70,22 @@ fun PrayerScreen(
     else
         listOf(R.string.prayer_tab_today, R.string.prayer_tab_family)
 
-    var selectedTab     by remember { mutableIntStateOf(0) }
+    var selectedTab       by remember { mutableIntStateOf(0) }
     var showAddGoalDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Consume reminderSentTo and show a Snackbar confirmation
+    val reminderSentTo = state.reminderSentTo
+    val reminderMsg    = stringResource(R.string.prayer_reminder_sent_to)
+    LaunchedEffect(reminderSentTo) {
+        if (reminderSentTo != null) {
+            snackbarHostState.showSnackbar("$reminderMsg $reminderSentTo 🔔")
+            viewModel.clearReminderSent()
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -141,7 +153,11 @@ fun PrayerScreen(
                 selectedTab == 0 ->
                     TodayTab(state = state, currentUser = currentUser, viewModel = viewModel)
                 selectedTab == 1 ->
-                    FamilyStatsTab(state = state, currentUser = currentUser)
+                    FamilyStatsTab(
+                        state          = state,
+                        currentUser    = currentUser,
+                        onSendReminder = { userId, name -> viewModel.sendReminder(userId, name) },
+                    )
                 isFather && selectedTab == 2 ->
                     ManageTab(state = state, viewModel = viewModel)
             }
@@ -726,6 +742,7 @@ private fun AllDoneAchievements(state: PrayerUiState, userId: String) {
 private fun FamilyStatsTab(
     state: PrayerUiState,
     currentUser: User?,
+    onSendReminder: (userId: String, name: String) -> Unit,
 ) {
     val userId  = currentUser?.id ?: return
     val today   = remember { System.currentTimeMillis() / (24 * 60 * 60 * 1000L) }
@@ -744,11 +761,14 @@ private fun FamilyStatsTab(
             val completed = state.completedTodayCount(member.id)
             val rate      = if (active > 0) completed.toFloat() / active else 0f
             MemberProgressRow(
-                member    = member,
-                completed = completed,
-                total     = active,
-                rate      = rate,
-                isMe      = member.id == userId,
+                member         = member,
+                completed      = completed,
+                total          = active,
+                rate           = rate,
+                isMe           = member.id == userId,
+                onSendReminder = if (member.id != userId && rate < 1f)
+                    { -> onSendReminder(member.id, member.name) }
+                else null,
             )
         }
 
@@ -789,67 +809,89 @@ private fun MemberProgressRow(
     total: Int,
     rate: Float,
     isMe: Boolean,
+    /** Non-null when a remind button should be shown; null for self or already-complete members. */
+    onSendReminder: (() -> Unit)?,
 ) {
-    Row(
-        modifier              = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment     = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        // Avatar (initials)
-        Box(
-            modifier         = Modifier
-                .size(42.dp)
-                .clip(CircleShape)
-                .background(if (isMe) PrayerGreenLight else MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
+    Column {
+        Row(
+            modifier              = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                member.name.firstOrNull()?.uppercase() ?: "?",
-                style  = MaterialTheme.typography.titleMedium,
-                color  = if (isMe) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth(),
+            // Avatar (initials)
+            Box(
+                modifier         = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(if (isMe) PrayerGreenLight else MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    "${member.name}${if (isMe) " (${stringResource(R.string.prayer_me)})" else ""}",
-                    style     = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                )
-                Text(
-                    "$completed/$total",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (rate >= 1f) PrayerGreenLight
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    member.name.firstOrNull()?.uppercase() ?: "?",
+                    style      = MaterialTheme.typography.titleMedium,
+                    color      = if (isMe) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Bold,
                 )
             }
-            LinearProgressIndicator(
-                progress   = { rate },
-                modifier   = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-                    .height(6.dp)
-                    .clip(CircleShape),
-                color      = when {
-                    rate >= 1f  -> PrayerGreenLight
-                    rate >= 0.5f -> PrayerGoldLight
-                    else        -> MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
-                },
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-            )
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        "${member.name}${if (isMe) " (${stringResource(R.string.prayer_me)})" else ""}",
+                        style      = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        if (total > 0) "$completed/$total" else "—",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (rate >= 1f) PrayerGreenLight
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                LinearProgressIndicator(
+                    progress   = { rate },
+                    modifier   = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                        .height(6.dp)
+                        .clip(CircleShape),
+                    color      = when {
+                        rate >= 1f   -> PrayerGreenLight
+                        rate >= 0.5f -> PrayerGoldLight
+                        else         -> MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
+                    },
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+            }
+
+            // Remind button — only for other members who haven't completed yet
+            if (onSendReminder != null) {
+                IconButton(
+                    onClick  = onSendReminder,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(PrayerGreenLight.copy(alpha = 0.12f)),
+                ) {
+                    Icon(
+                        Icons.Default.NotificationAdd,
+                        contentDescription = stringResource(R.string.prayer_send_reminder),
+                        tint     = PrayerGreenLight,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
         }
+        HorizontalDivider(
+            modifier  = Modifier.padding(horizontal = 16.dp),
+            thickness = 0.5.dp,
+        )
     }
-    HorizontalDivider(
-        modifier  = Modifier.padding(horizontal = 16.dp),
-        thickness = 0.5.dp,
-    )
 }
 
 @Composable

@@ -54,6 +54,8 @@ class SyncServer @Inject constructor(
     private val lowStockNotifier: LowStockNotifier,
     private val presenceTracker: MemberPresenceTracker,
     private val deletionTracker: DeletionTracker,
+    private val prayerReminderStore: PrayerReminderStore,
+    private val sessionRepository: SessionRepository,
 ) {
     private var server: ApplicationEngine? = null
 
@@ -116,6 +118,7 @@ class SyncServer @Inject constructor(
                 .map { PrayerLogDto(it.id, it.userId, it.sunnahKey, it.epochDay, it.completedCount, it.loggedAt) },
             deletedUserIds          = deletionTracker.getDeletedUserIds().toList().ifEmpty { null },
             deletedPrayerGoalIds    = deletionTracker.getDeletedPrayerGoalIds().toList().ifEmpty { null },
+            prayerReminders         = prayerReminderStore.getActiveReminders().ifEmpty { null },
             presenceMap             = presenceMap.ifEmpty { null },
             leaderId                = father?.id,
         )
@@ -201,6 +204,14 @@ class SyncServer @Inject constructor(
             prayerRepository.upsertAllLogs(
                 dtos.map { dto -> com.familyhome.app.domain.model.PrayerLog(dto.id, dto.userId, dto.sunnahKey, dto.epochDay, dto.completedCount, dto.loggedAt) }
             )
+        }
+        // Merge family prayer reminders; also notify the leader if they're the target
+        payload.prayerReminders?.let { reminders ->
+            prayerReminderStore.mergeReminders(reminders)
+            val leaderId = sessionRepository.getCurrentUserId()
+            if (leaderId != null) {
+                prayerReminderStore.processForCurrentUser(leaderId)
+            }
         }
     }
 

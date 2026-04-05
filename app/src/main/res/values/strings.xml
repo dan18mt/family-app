@@ -107,6 +107,15 @@
     <string name="prayer_add_member_title">Assign to Another Member</string>
     <string name="prayer_all_assigned">All family members are already assigned to this goal.</string>
 
+    <!-- Prayer screen — family reminders -->
+    <string name="prayer_send_reminder">Send reminder</string>
+    <string name="prayer_reminder_sent_to">Reminder sent to</string>
+    <string name="prayer_reminder_from">%1$s is reminding you</string>
+    <string name="prayer_reminder_body">Time to complete your ibadah goals for today!</string>
+    <string name="prayer_reminder_body_long">%1$s wants to remind you to complete your sunnah ibadah goals for today. You can do it!</string>
+    <string name="prayer_reminder_channel_name">Family Prayer Reminders</string>
+    <string name="prayer_reminder_channel_desc">Reminders sent by family members to complete sunnah ibadah</string>
+
     <!-- Expenses screen -->
     <string name="expenses_this_month">This month</string>
     <string name="expenses_spending_by_category">Spending by category</string>
