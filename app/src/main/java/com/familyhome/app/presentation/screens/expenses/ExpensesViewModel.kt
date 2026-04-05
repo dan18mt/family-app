@@ -120,16 +120,20 @@ class ExpensesViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            state.filter { it.currentUser != null }.first().let { s ->
-                getExpensesUseCase(s.currentUser!!, s.allUsers).collect { expenses ->
-                    val visible = expenses.filter { expense ->
-                        PermissionFilter.canSee(s.currentUser, expense, s.allUsers)
-                    }
-                    val total = visible
-                        .filter { it.expenseDate >= currentMonthStart() }
-                        .sumOf { it.amount }
-                    _state.update { it.copy(expenses = visible, totalThisMonth = total, isLoading = false) }
+            val initialUser = state.filter { it.currentUser != null }.first().currentUser!!
+            getExpensesUseCase(initialUser, emptyList()).collect { expenses ->
+                // Always read the latest state so that allUsers (and other filters) are fresh.
+                // This prevents a race condition where allUsers is empty at collection start,
+                // causing Wife role to incorrectly exclude kids' expenses from the total.
+                val current = _state.value
+                val user = current.currentUser ?: return@collect
+                val visible = expenses.filter { expense ->
+                    PermissionFilter.canSee(user, expense, current.allUsers)
                 }
+                val total = visible
+                    .filter { it.expenseDate >= currentMonthStart() }
+                    .sumOf { it.amount }
+                _state.update { it.copy(expenses = visible, totalThisMonth = total, isLoading = false) }
             }
         }
     }

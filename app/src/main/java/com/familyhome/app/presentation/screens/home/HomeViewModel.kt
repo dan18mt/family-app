@@ -1,8 +1,10 @@
 package com.familyhome.app.presentation.screens.home
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.familyhome.app.data.LocaleHelper
 import com.familyhome.app.data.notification.NotificationCenter
 import com.familyhome.app.data.onboarding.InviteDto
 import com.familyhome.app.data.onboarding.JoinRequestDto
@@ -18,6 +20,7 @@ import com.familyhome.app.data.sync.MemberPresenceTracker
 import com.familyhome.app.presentation.screens.expenses.ExpensesViewModel
 import com.familyhome.app.data.sync.SyncRepositoryImpl
 import com.familyhome.app.data.sync.SyncServer
+import com.familyhome.app.domain.model.AppLanguage
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.StockItem
 import com.familyhome.app.domain.model.SyncResult
@@ -29,6 +32,7 @@ import com.familyhome.app.domain.usecase.user.GetCurrentUserUseCase
 import com.familyhome.app.domain.usecase.user.GetFamilyMembersUseCase
 import com.familyhome.app.domain.usecase.user.UpdateProfileUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -59,6 +63,7 @@ data class HomeUiState(
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val getCurrentUserUseCase: GetCurrentUserUseCase,
     private val getFamilyMembersUseCase: GetFamilyMembersUseCase,
     private val getLowStockItemsUseCase: GetLowStockItemsUseCase,
@@ -79,6 +84,19 @@ class HomeViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(HomeUiState())
     val state = _state.asStateFlow()
+
+    /** Emits when the user changes the app language; the UI should recreate the Activity. */
+    private val _languageChanged = MutableSharedFlow<AppLanguage>(extraBufferCapacity = 1)
+    val languageChanged: SharedFlow<AppLanguage> = _languageChanged.asSharedFlow()
+
+    /** Current language stored in SharedPreferences (synchronous read). */
+    val currentLanguage: AppLanguage
+        get() = LocaleHelper.getStoredLanguage(appContext)
+
+    fun setLanguage(language: AppLanguage) {
+        LocaleHelper.saveLanguage(appContext, language)
+        viewModelScope.launch { _languageChanged.emit(language) }
+    }
 
     init {
         loadData()

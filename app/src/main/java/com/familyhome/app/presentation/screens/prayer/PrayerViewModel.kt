@@ -2,6 +2,7 @@ package com.familyhome.app.presentation.screens.prayer
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.familyhome.app.data.sync.DeletionTracker
 import com.familyhome.app.domain.model.PrayerGoalSetting
 import com.familyhome.app.domain.model.PrayerLog
 import com.familyhome.app.domain.model.SunnahGoal
@@ -50,23 +51,24 @@ class PrayerViewModel @Inject constructor(
     private val prayerRepository: PrayerRepository,
     private val getCurrentUserUseCase: GetCurrentUserUseCase,
     private val getFamilyMembersUseCase: GetFamilyMembersUseCase,
+    private val deletionTracker: DeletionTracker,
 ) : ViewModel() {
     private val _state = MutableStateFlow(PrayerUiState())
     val state = _state.asStateFlow()
 
     init {
+        // Load currentUser first, then start collecting goals so isLoading=false
+        // is only emitted once we know who the current user is (fixes Today tab for leader).
         viewModelScope.launch {
             val user = getCurrentUserUseCase()
             _state.update { it.copy(currentUser = user) }
+            prayerRepository.getAllGoalSettings().collect { settings ->
+                _state.update { it.copy(goalSettings = settings, isLoading = false) }
+            }
         }
         viewModelScope.launch {
             getFamilyMembersUseCase().collect { members ->
                 _state.update { it.copy(allUsers = members) }
-            }
-        }
-        viewModelScope.launch {
-            prayerRepository.getAllGoalSettings().collect { settings ->
-                _state.update { it.copy(goalSettings = settings, isLoading = false) }
             }
         }
         viewModelScope.launch {
@@ -140,10 +142,11 @@ class PrayerViewModel @Inject constructor(
         }
     }
 
-    /** Remove a goal (leader only). */
+    /** Remove a goal (leader only). Records the deletion so it propagates to member devices on sync. */
     fun removeGoal(setting: PrayerGoalSetting) {
         viewModelScope.launch {
             prayerRepository.deleteGoalSetting(setting.id)
+            deletionTracker.recordPrayerGoalDeletion(setting.id)
         }
     }
 

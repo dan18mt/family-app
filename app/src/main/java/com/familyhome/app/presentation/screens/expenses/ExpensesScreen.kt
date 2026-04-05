@@ -2,6 +2,7 @@ package com.familyhome.app.presentation.screens.expenses
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,17 +18,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.res.stringResource
+import com.familyhome.app.R
 import com.familyhome.app.domain.model.*
 import com.familyhome.app.presentation.components.LoadingScreen
 import com.familyhome.app.presentation.theme.BudgetWarningColor
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.atan2
+import kotlin.math.sqrt
 
 // ── Icon catalogue ────────────────────────────────────────────────────────────
 val CATEGORY_ICON_OPTIONS: List<Pair<String, ImageVector>> = listOf(
@@ -408,17 +414,17 @@ private fun ExpenseChartCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically,
             ) {
-                Text("Spending by category", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.expenses_spending_by_category), style = MaterialTheme.typography.titleSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     FilterChip(
                         selected = !isCustomRange && selectedPeriod == ChartPeriod.MONTHLY,
                         onClick  = { onPeriodChange(ChartPeriod.MONTHLY); onDateRangeChange(null, null) },
-                        label    = { Text("Month") },
+                        label    = { Text(stringResource(R.string.expenses_period_month)) },
                     )
                     FilterChip(
                         selected = !isCustomRange && selectedPeriod == ChartPeriod.WEEKLY,
                         onClick  = { onPeriodChange(ChartPeriod.WEEKLY); onDateRangeChange(null, null) },
-                        label    = { Text("Week") },
+                        label    = { Text(stringResource(R.string.expenses_period_week)) },
                     )
                 }
             }
@@ -466,7 +472,7 @@ private fun ExpenseChartCard(
                         FilterChip(
                             selected = selectedMemberId == null,
                             onClick  = { onMemberChange(null) },
-                            label    = { Text("All") },
+                            label    = { Text(stringResource(R.string.expenses_all_members)) },
                         )
                     }
                     items(allUsers) { user ->
@@ -483,16 +489,44 @@ private fun ExpenseChartCard(
 
             if (byCategory.isEmpty()) {
                 Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                    Text("No expenses in this period", style = MaterialTheme.typography.bodySmall,
+                    Text(stringResource(R.string.expenses_no_expenses_period), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
+                val total = byCategory.sumOf { it.amount }.toFloat()
                 Box(
                     modifier         = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    val total = byCategory.sumOf { it.amount }.toFloat()
-                    Canvas(modifier = Modifier.size(160.dp)) {
+                    Canvas(
+                        modifier = Modifier
+                            .size(160.dp)
+                            .pointerInput(byCategory, selectedCategoryKey) {
+                                detectTapGestures { offset ->
+                                    val cx = size.width / 2f
+                                    val cy = size.height / 2f
+                                    val dx = offset.x - cx
+                                    val dy = offset.y - cy
+                                    // Ignore taps outside the circle
+                                    if (sqrt(dx * dx + dy * dy) > minOf(cx, cy)) return@detectTapGestures
+                                    // Map touch to angle (0° = 12 o'clock, clockwise)
+                                    var angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat() + 90f
+                                    if (angle < 0f) angle += 360f
+                                    var accAngle = 0f
+                                    for (entry in byCategory) {
+                                        val sweep = (entry.amount / total) * 360f
+                                        if (angle < accAngle + sweep) {
+                                            onCategorySelect(
+                                                if (entry.categoryKey == selectedCategoryKey) null
+                                                else entry.categoryKey
+                                            )
+                                            return@detectTapGestures
+                                        }
+                                        accAngle += sweep
+                                    }
+                                }
+                            }
+                    ) {
                         var startAngle = -90f
                         byCategory.forEachIndexed { i, entry ->
                             val sweep = (entry.amount.toFloat() / total) * 360f
@@ -580,7 +614,7 @@ private fun ExpenseChartCard(
                             onClick  = { onCategorySelect(null) },
                             modifier = Modifier.align(Alignment.End),
                         ) {
-                            Text("Show all categories", style = MaterialTheme.typography.labelSmall)
+                            Text(stringResource(R.string.expenses_show_all_categories), style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
@@ -596,7 +630,7 @@ private fun SummaryCard(totalCents: Long) {
     val formatted = NumberFormat.getCurrencyInstance(Locale("id", "ID")).format(totalCents / 100.0)
     ElevatedCard(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("This month", style = MaterialTheme.typography.labelSmall)
+            Text(stringResource(R.string.expenses_this_month), style = MaterialTheme.typography.labelSmall)
             Text(formatted, style = MaterialTheme.typography.headlineMedium)
         }
     }

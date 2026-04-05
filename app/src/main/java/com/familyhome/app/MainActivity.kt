@@ -1,6 +1,7 @@
 package com.familyhome.app
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -8,6 +9,7 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.familyhome.app.data.LocaleHelper
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,6 +40,11 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var sessionRepository: SessionRepository
     @Inject lateinit var userRepository: UserRepository
     @Inject lateinit var alarmScheduler: AlarmScheduler
+
+    override fun attachBaseContext(newBase: Context) {
+        val language = LocaleHelper.getStoredLanguage(newBase)
+        super.attachBaseContext(LocaleHelper.wrap(newBase, language))
+    }
 
     // ── Permission launchers ─────────────────────────────────────────────────
 

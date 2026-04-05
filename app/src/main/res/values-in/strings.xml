@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FamilyHome</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Beranda</string>
+    <string name="nav_stock">Dapur</string>
+    <string name="nav_chores">Tugas</string>
+    <string name="nav_expenses">Pengeluaran</string>
+    <string name="nav_chat">AI Chat</string>
+    <string name="nav_prayer">Ibadah</string>
+
+    <!-- Roles -->
+    <string name="role_father">Pemimpin</string>
+    <string name="role_wife">Pasangan</string>
+    <string name="role_kid">Anak</string>
+
+    <!-- Stock categories -->
+    <string name="category_food">Makanan</string>
+    <string name="category_cleaning">Kebersihan</string>
+    <string name="category_toiletry">Perlengkapan Mandi</string>
+    <string name="category_other">Lainnya</string>
+
+    <!-- Expense categories -->
+    <string name="expense_groceries">Belanja Dapur</string>
+    <string name="expense_transport">Transportasi</string>
+    <string name="expense_school">Pendidikan</string>
+    <string name="expense_health">Kesehatan</string>
+    <string name="expense_entertainment">Hiburan</string>
+    <string name="expense_household">Rumah Tangga</string>
+    <string name="expense_other">Lainnya</string>
+
+    <!-- Sync -->
+    <string name="sync_connected">Terhubung</string>
+    <string name="sync_disconnected">Tidak terhubung</string>
+    <string name="sync_last_synced">Terakhir disinkron: %1$s</string>
+    <string name="sync_never">Belum pernah disinkron</string>
+    <string name="sync_in_progress">Menyinkron…</string>
+
+    <!-- General UI -->
+    <string name="action_save">Simpan</string>
+    <string name="action_cancel">Batal</string>
+    <string name="action_delete">Hapus</string>
+    <string name="action_edit">Ubah</string>
+    <string name="action_add">Tambah</string>
+    <string name="action_confirm">Konfirmasi</string>
+    <string name="error_generic">Terjadi kesalahan. Silakan coba lagi.</string>
+    <string name="label_low_stock">Stok menipis</string>
+    <string name="label_budget_warning">Mendekati batas anggaran</string>
+    <string name="pin_hint">Masukkan PIN 4 digit</string>
+    <string name="setup_welcome">Selamat datang! Mari siapkan keluarga Anda.</string>
+
+    <!-- Home screen -->
+    <string name="home_quick_access">Akses cepat</string>
+    <string name="home_family">Keluarga</string>
+    <string name="home_budget_alerts">Peringatan anggaran</string>
+    <string name="home_low_stock">Stok menipis</string>
+    <string name="home_pending_approvals">Menunggu Persetujuan</string>
+    <string name="home_invite_member">Undang Anggota</string>
+    <string name="home_online">Online</string>
+    <string name="home_offline">Offline</string>
+    <string name="home_see_all">Lihat semua %1$d item</string>
+
+    <!-- Prayer screen -->
+    <string name="prayer_title">Pelacak Ibadah</string>
+    <string name="prayer_subtitle">Bangun kebiasaan ibadah keluarga</string>
+    <string name="prayer_tab_today">Hari Ini</string>
+    <string name="prayer_tab_manage">Kelola Target</string>
+    <string name="prayer_today_progress">Progres Hari Ini</string>
+    <string name="prayer_all_done">Masya Allah! Semua target selesai hari ini!</string>
+    <string name="prayer_no_goals">Belum ada target</string>
+    <string name="prayer_no_goals_hint">Minta pemimpin keluarga untuk menambahkan target sunnah</string>
+    <string name="prayer_add_goal">Tambah Target Sunnah</string>
+    <string name="prayer_assigned_to">Ditugaskan ke: %1$s</string>
+    <string name="prayer_all_family">Semua anggota keluarga</string>
+    <string name="prayer_active_goals">Target Aktif</string>
+    <string name="prayer_no_goals_manage">Belum ada target. Ketuk + untuk menambahkan target sunnah untuk keluarga.</string>
+    <string name="prayer_today_goals">Target Hari Ini</string>
+
+    <!-- Expenses screen -->
+    <string name="expenses_this_month">Bulan ini</string>
+    <string name="expenses_spending_by_category">Pengeluaran per kategori</string>
+    <string name="expenses_no_expenses_period">Tidak ada pengeluaran di periode ini</string>
+    <string name="expenses_add">Tambah pengeluaran</string>
+    <string name="expenses_amount">Jumlah (IDR)</string>
+    <string name="expenses_description">Keterangan</string>
+    <string name="expenses_category">Kategori</string>
+    <string name="expenses_show_all_categories">Tampilkan semua kategori</string>
+    <string name="expenses_period_month">Bulan</string>
+    <string name="expenses_period_week">Minggu</string>
+    <string name="expenses_all_members">Semua</string>
+
+    <!-- Language -->
+    <string name="settings_language">Bahasa</string>
+    <string name="language_english">English</string>
+    <string name="language_indonesian">Indonesia</string>
+    <string name="language_select_title">Pilih Bahasa</string>
+</resources>

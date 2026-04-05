@@ -1,5 +1,6 @@
 package com.familyhome.app.presentation.screens.home
 
+import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -18,12 +19,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.familyhome.app.data.onboarding.JoinRequestDto
 import com.familyhome.app.data.onboarding.KnockDto
 import com.familyhome.app.data.sync.MemberPresenceTracker
+import com.familyhome.app.domain.model.AppLanguage
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.User
 import com.familyhome.app.presentation.components.AvatarInitials
@@ -39,9 +42,24 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
-    var roleDialogRequest by remember { mutableStateOf<JoinRequestDto?>(null) }
-    var kickTarget        by remember { mutableStateOf<User?>(null) }
+    val snackbarHostState    = remember { SnackbarHostState() }
+    var roleDialogRequest    by remember { mutableStateOf<JoinRequestDto?>(null) }
+    var kickTarget           by remember { mutableStateOf<User?>(null) }
+    var showLanguageDialog   by remember { mutableStateOf(false) }
+    val activity             = LocalContext.current as? Activity
+
+    // Recreate activity when language changes so new locale strings load
+    LaunchedEffect(Unit) {
+        viewModel.languageChanged.collect { activity?.recreate() }
+    }
+
+    if (showLanguageDialog) {
+        LanguageDialog(
+            currentLanguage = viewModel.currentLanguage,
+            onSelect = { lang -> viewModel.setLanguage(lang); showLanguageDialog = false },
+            onDismiss = { showLanguageDialog = false },
+        )
+    }
 
     val pickImageLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -133,6 +151,9 @@ fun HomeScreen(
                             Icon(Icons.Default.Notifications, "Notifications",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                    }
+                    IconButton(onClick = { showLanguageDialog = true }) {
+                        Icon(Icons.Default.Language, "Language", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (state.isSyncing) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp).padding(end = 4.dp), strokeWidth = 2.dp)
@@ -344,6 +365,47 @@ private fun JoinRequestKnockCard(knock: KnockDto, isLoading: Boolean, onSendInvi
             if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
             else Button(onClick = onSendInvite) { Text("Invite") }
         },
+    )
+}
+
+@Composable
+private fun LanguageDialog(
+    currentLanguage: AppLanguage,
+    onSelect: (AppLanguage) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon  = { Icon(Icons.Default.Language, null) },
+        title = { Text("Language / Bahasa") },
+        text  = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppLanguage.entries.forEach { lang ->
+                    val isSelected = lang == currentLanguage
+                    OutlinedButton(
+                        onClick   = { onSelect(lang) },
+                        modifier  = Modifier.fillMaxWidth(),
+                        colors    = if (isSelected)
+                            ButtonDefaults.outlinedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            )
+                        else ButtonDefaults.outlinedButtonColors(),
+                    ) {
+                        if (isSelected) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(lang.displayName)
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
 

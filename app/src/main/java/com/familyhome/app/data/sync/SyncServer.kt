@@ -110,6 +110,7 @@ class SyncServer @Inject constructor(
             prayerLogs              = prayerRepository.getLogsSince(0L).first()
                 .map { PrayerLogDto(it.id, it.userId, it.sunnahKey, it.epochDay, it.completedCount, it.loggedAt) },
             deletedUserIds          = deletionTracker.getDeletedUserIds().toList().ifEmpty { null },
+            deletedPrayerGoalIds    = deletionTracker.getDeletedPrayerGoalIds().toList().ifEmpty { null },
             presenceMap             = presenceMap.ifEmpty { null },
             leaderId                = father?.id,
         )
@@ -173,9 +174,17 @@ class SyncServer @Inject constructor(
             )
         }
         payload.prayerGoalSettings?.let { dtos ->
-            prayerRepository.upsertAllGoalSettings(
-                dtos.map { dto -> com.familyhome.app.domain.model.PrayerGoalSetting(dto.id, dto.sunnahKey, dto.isEnabled, dto.assignedTo, dto.createdBy, dto.createdAt) }
-            )
+            val deletedGoalIds = deletionTracker.getDeletedPrayerGoalIds()
+            val toUpsert = dtos.filter { it.id !in deletedGoalIds }
+            if (toUpsert.isNotEmpty()) {
+                prayerRepository.upsertAllGoalSettings(
+                    toUpsert.map { dto ->
+                        com.familyhome.app.domain.model.PrayerGoalSetting(
+                            dto.id, dto.sunnahKey, dto.isEnabled, dto.assignedTo, dto.createdBy, dto.createdAt
+                        )
+                    }
+                )
+            }
         }
         payload.prayerLogs?.let { dtos ->
             prayerRepository.upsertAllLogs(

@@ -17,11 +17,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.familyhome.app.R
 import com.familyhome.app.domain.model.PrayerGoalSetting
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.SunnahGoal
@@ -51,12 +54,12 @@ fun PrayerScreen(
                 title = {
                     Column {
                         Text(
-                            "Ibadah Tracker",
+                            stringResource(R.string.prayer_title),
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Text(
-                            "Establish family prayer habits",
+                            stringResource(R.string.prayer_subtitle),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -96,12 +99,12 @@ fun PrayerScreen(
                     Tab(
                         selected = selectedTab == 0,
                         onClick  = { selectedTab = 0 },
-                        text     = { Text("Today") },
+                        text     = { Text(stringResource(R.string.prayer_tab_today)) },
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick  = { selectedTab = 1 },
-                        text     = { Text("Manage Goals") },
+                        text     = { Text(stringResource(R.string.prayer_tab_manage)) },
                     )
                 }
             }
@@ -153,12 +156,12 @@ private fun TodayTab(
                 )
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "No goals set yet",
+                    stringResource(R.string.prayer_no_goals),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    "Ask your family leader to add sunnah goals",
+                    stringResource(R.string.prayer_no_goals_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 )
@@ -178,18 +181,20 @@ private fun TodayTab(
             // Daily summary header
             DailySummaryCard(completed = completedCount, total = totalCount)
         }
-        item { SectionHeader("Today's Goals") }
+        item { SectionHeader(stringResource(R.string.prayer_today_goals)) }
+        val langTag = LocalContext.current.resources.configuration.locales[0].language
         items(activeGoals, key = { it.id }) { goal ->
             val log = state.todayLogFor(goal.sunnahKey, userId)
             val sunnah = goal.sunnah
             if (sunnah != null) {
                 GoalProgressCard(
-                    sunnah        = sunnah,
+                    sunnah         = sunnah,
+                    langTag        = langTag,
                     completedCount = log?.completedCount ?: 0,
-                    isCompleted   = log?.isCompleted == true,
-                    weekLogs      = state.weekLogs.filter { it.sunnahKey == goal.sunnahKey && it.userId == userId },
-                    onLog         = { viewModel.logPrayer(goal.sunnahKey) },
-                    onUndo        = { viewModel.undoPrayer(goal.sunnahKey) },
+                    isCompleted    = log?.isCompleted == true,
+                    weekLogs       = state.weekLogs.filter { it.sunnahKey == goal.sunnahKey && it.userId == userId },
+                    onLog          = { viewModel.logPrayer(goal.sunnahKey) },
+                    onUndo         = { viewModel.undoPrayer(goal.sunnahKey) },
                 )
             }
         }
@@ -225,7 +230,7 @@ private fun DailySummaryCard(completed: Int, total: Int) {
             }
             Column {
                 Text(
-                    if (allDone) "MashaAllah! All goals completed today!" else "Today's Progress",
+                    if (allDone) stringResource(R.string.prayer_all_done) else stringResource(R.string.prayer_today_progress),
                     style = MaterialTheme.typography.titleSmall,
                     color = if (allDone) Color.White else MaterialTheme.colorScheme.onSurface,
                 )
@@ -243,6 +248,7 @@ private fun DailySummaryCard(completed: Int, total: Int) {
 @Composable
 private fun GoalProgressCard(
     sunnah: SunnahGoal,
+    langTag: String,
     completedCount: Int,
     isCompleted: Boolean,
     weekLogs: List<com.familyhome.app.domain.model.PrayerLog>,
@@ -291,13 +297,13 @@ private fun GoalProgressCard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        sunnah.title,
+                        sunnah.localizedTitle(langTag),
                         style    = MaterialTheme.typography.bodyLarge,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        "${completedCount}/${sunnah.dailyTarget} ${sunnah.unit}",
+                        "${completedCount}/${sunnah.dailyTarget} ${sunnah.localizedUnit(langTag)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isCompleted) PrayerGreenLight else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -409,7 +415,7 @@ private fun ManageTab(
     viewModel: PrayerViewModel,
 ) {
     LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
-        item { SectionHeader("Active Goals") }
+        item { SectionHeader(stringResource(R.string.prayer_active_goals)) }
         if (state.goalSettings.isEmpty()) {
             item {
                 Box(
@@ -417,7 +423,7 @@ private fun ManageTab(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        "No goals added yet. Tap + to add a sunnah goal for your family.",
+                        stringResource(R.string.prayer_no_goals_manage),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -444,18 +450,20 @@ private fun ManageGoalItem(
     onRemove: () -> Unit,
 ) {
     val sunnah       = setting.sunnah ?: return
+    val langTag      = LocalContext.current.resources.configuration.locales[0].language
+    val allFamilyLabel = stringResource(R.string.prayer_all_family)
     val assigneeName = when {
-        setting.assignedTo == null -> "All family"
+        setting.assignedTo == null -> allFamilyLabel
         else -> allUsers.firstOrNull { it.id == setting.assignedTo }?.name ?: "Unknown"
     }
 
     ListItem(
         headlineContent = {
-            Text(sunnah.title, style = MaterialTheme.typography.bodyLarge)
+            Text(sunnah.localizedTitle(langTag), style = MaterialTheme.typography.bodyLarge)
         },
         supportingContent = {
             Text(
-                "Assigned to: $assigneeName • ${sunnah.dailyTarget} ${sunnah.unit}/day",
+                "Assigned to: $assigneeName • ${sunnah.dailyTarget} ${sunnah.localizedUnit(langTag)}/day",
                 style = MaterialTheme.typography.bodySmall,
             )
         },
@@ -502,6 +510,7 @@ private fun AddGoalDialog(
     val existingKeys = existing.map { it.sunnahKey }.toSet()
     val available    = SunnahGoal.entries.filter { it.name !in existingKeys }
 
+    val langTag = LocalContext.current.resources.configuration.locales[0].language
     var selectedSunnah by remember { mutableStateOf<SunnahGoal?>(null) }
     var selectedUser   by remember { mutableStateOf<String?>(null) } // null = all family
 
@@ -510,7 +519,7 @@ private fun AddGoalDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title  = { Text("Add Sunnah Goal") },
+        title  = { Text(stringResource(R.string.prayer_add_goal)) },
         text   = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 // Sunnah picker
@@ -519,7 +528,7 @@ private fun AddGoalDialog(
                     onExpandedChange = { sunnahExpanded = it },
                 ) {
                     OutlinedTextField(
-                        value         = selectedSunnah?.title ?: "Select a sunnah practice",
+                        value         = selectedSunnah?.localizedTitle(langTag) ?: if (langTag == "en") "Select a sunnah practice" else "Pilih amalan sunnah",
                         onValueChange = {},
                         readOnly      = true,
                         label         = { Text("Sunnah Practice") },
@@ -539,7 +548,7 @@ private fun AddGoalDialog(
                         } else {
                             available.forEach { sunnah ->
                                 DropdownMenuItem(
-                                    text    = { Text(sunnah.title) },
+                                    text    = { Text(sunnah.localizedTitle(langTag)) },
                                     onClick = {
                                         selectedSunnah = sunnah
                                         sunnahExpanded = false
@@ -577,9 +586,10 @@ private fun AddGoalDialog(
                     expanded         = memberExpanded,
                     onExpandedChange = { memberExpanded = it },
                 ) {
+                    val allFamilyStr = stringResource(R.string.prayer_all_family)
                     OutlinedTextField(
-                        value         = if (selectedUser == null) "All family members"
-                                        else allUsers.firstOrNull { it.id == selectedUser }?.name ?: "All family members",
+                        value         = if (selectedUser == null) allFamilyStr
+                                        else allUsers.firstOrNull { it.id == selectedUser }?.name ?: allFamilyStr,
                         onValueChange = {},
                         readOnly      = true,
                         label         = { Text("Assign to") },
@@ -591,7 +601,7 @@ private fun AddGoalDialog(
                         onDismissRequest = { memberExpanded = false },
                     ) {
                         DropdownMenuItem(
-                            text    = { Text("All family members") },
+                            text    = { Text(allFamilyStr) },
                             onClick = { selectedUser = null; memberExpanded = false },
                         )
                         allUsers.forEach { user ->

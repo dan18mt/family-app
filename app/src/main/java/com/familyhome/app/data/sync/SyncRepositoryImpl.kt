@@ -116,6 +116,7 @@ class SyncRepositoryImpl @Inject constructor(
                 .map { com.familyhome.app.domain.model.PrayerGoalSettingDto(it.id, it.sunnahKey, it.isEnabled, it.assignedTo, it.createdBy, it.createdAt) },
             prayerLogs = prayerRepository.getLogsSince(0L).first()
                 .map { com.familyhome.app.domain.model.PrayerLogDto(it.id, it.userId, it.sunnahKey, it.epochDay, it.completedCount, it.loggedAt) },
+            deletedPrayerGoalIds = deletionTracker.getDeletedPrayerGoalIds().toList().ifEmpty { null },
         )
     }
 
@@ -151,10 +152,26 @@ class SyncRepositoryImpl @Inject constructor(
                 dtos.map { dto -> CustomExpenseCategory(dto.id, dto.name, dto.iconName) }
             )
         }
+        // Apply prayer-goal deletions sent by the leader before upserting new data
+        payload.deletedPrayerGoalIds?.let { ids ->
+            ids.forEach { id ->
+                prayerRepository.deleteGoalSetting(id)
+                deletionTracker.recordPrayerGoalDeletion(id)
+            }
+        }
+
+        val deletedGoalIds = deletionTracker.getDeletedPrayerGoalIds()
         payload.prayerGoalSettings?.let { dtos ->
-            prayerRepository.upsertAllGoalSettings(
-                dtos.map { dto -> com.familyhome.app.domain.model.PrayerGoalSetting(dto.id, dto.sunnahKey, dto.isEnabled, dto.assignedTo, dto.createdBy, dto.createdAt) }
-            )
+            val toUpsert = dtos.filter { it.id !in deletedGoalIds }
+            if (toUpsert.isNotEmpty()) {
+                prayerRepository.upsertAllGoalSettings(
+                    toUpsert.map { dto ->
+                        com.familyhome.app.domain.model.PrayerGoalSetting(
+                            dto.id, dto.sunnahKey, dto.isEnabled, dto.assignedTo, dto.createdBy, dto.createdAt
+                        )
+                    }
+                )
+            }
         }
         payload.prayerLogs?.let { dtos ->
             prayerRepository.upsertAllLogs(

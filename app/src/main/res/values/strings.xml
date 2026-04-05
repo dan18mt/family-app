@@ -8,10 +8,11 @@
     <string name="nav_chores">Chores</string>
     <string name="nav_expenses">Expenses</string>
     <string name="nav_chat">AI Chat</string>
+    <string name="nav_prayer">Ibadah</string>
 
     <!-- Roles -->
-    <string name="role_father">Father</string>
-    <string name="role_wife">Wife</string>
+    <string name="role_father">Leader</string>
+    <string name="role_wife">Partner</string>
     <string name="role_kid">Kid</string>
 
     <!-- Stock categories -->
@@ -48,4 +49,50 @@
     <string name="label_budget_warning">Approaching budget limit</string>
     <string name="pin_hint">Enter 4-digit PIN</string>
     <string name="setup_welcome">Welcome! Let\'s set up your family.</string>
+
+    <!-- Home screen -->
+    <string name="home_quick_access">Quick access</string>
+    <string name="home_family">Family</string>
+    <string name="home_budget_alerts">Budget alerts</string>
+    <string name="home_low_stock">Low stock</string>
+    <string name="home_pending_approvals">Pending Approvals</string>
+    <string name="home_invite_member">Invite Member</string>
+    <string name="home_online">Online</string>
+    <string name="home_offline">Offline</string>
+    <string name="home_see_all">See all %1$d items</string>
+
+    <!-- Prayer screen -->
+    <string name="prayer_title">Ibadah Tracker</string>
+    <string name="prayer_subtitle">Establish family prayer habits</string>
+    <string name="prayer_tab_today">Today</string>
+    <string name="prayer_tab_manage">Manage Goals</string>
+    <string name="prayer_today_progress">Today\'s Progress</string>
+    <string name="prayer_all_done">MashaAllah! All goals completed today!</string>
+    <string name="prayer_no_goals">No goals set yet</string>
+    <string name="prayer_no_goals_hint">Ask your family leader to add sunnah goals</string>
+    <string name="prayer_add_goal">Add Sunnah Goal</string>
+    <string name="prayer_assigned_to">Assigned to: %1$s</string>
+    <string name="prayer_all_family">All family members</string>
+    <string name="prayer_active_goals">Active Goals</string>
+    <string name="prayer_no_goals_manage">No goals added yet. Tap + to add a sunnah goal for your family.</string>
+    <string name="prayer_today_goals">Today\'s Goals</string>
+
+    <!-- Expenses screen -->
+    <string name="expenses_this_month">This month</string>
+    <string name="expenses_spending_by_category">Spending by category</string>
+    <string name="expenses_no_expenses_period">No expenses in this period</string>
+    <string name="expenses_add">Add expense</string>
+    <string name="expenses_amount">Amount (IDR)</string>
+    <string name="expenses_description">Description</string>
+    <string name="expenses_category">Category</string>
+    <string name="expenses_show_all_categories">Show all categories</string>
+    <string name="expenses_period_month">Month</string>
+    <string name="expenses_period_week">Week</string>
+    <string name="expenses_all_members">All</string>
+
+    <!-- Language -->
+    <string name="settings_language">Language</string>
+    <string name="language_english">English</string>
+    <string name="language_indonesian">Indonesia</string>
+    <string name="language_select_title">Select Language</string>
 </resources>

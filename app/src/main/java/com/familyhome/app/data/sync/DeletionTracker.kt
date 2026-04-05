@@ -16,28 +16,35 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Tracks user IDs that have been permanently deleted by the family leader.
+ * Tracks IDs of entities permanently deleted by the family leader.
  * Persisted to DataStore so deletions survive app restarts.
  *
- * Used by [SyncServer] to prevent re-insertion of deleted users when members push data,
- * and by [SyncRepositoryImpl] to apply leader deletions on member devices.
+ * Used by [SyncServer] and [SyncRepositoryImpl] to prevent re-insertion of
+ * deleted entities when member devices push stale data.
  */
 @Singleton
 class DeletionTracker @Inject constructor(
     private val dataStore: DataStore<Preferences>,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val deletedUserIdsKey = stringSetPreferencesKey("deleted_user_ids")
 
-    private val _deletedUserIds = MutableStateFlow<Set<String>>(emptySet())
+    private val deletedUserIdsKey        = stringSetPreferencesKey("deleted_user_ids")
+    private val deletedPrayerGoalIdsKey  = stringSetPreferencesKey("deleted_prayer_goal_ids")
+
+    private val _deletedUserIds       = MutableStateFlow<Set<String>>(emptySet())
+    private val _deletedPrayerGoalIds = MutableStateFlow<Set<String>>(emptySet())
+
     val deletedUserIds: StateFlow<Set<String>> = _deletedUserIds.asStateFlow()
 
     init {
         scope.launch {
-            val persisted = dataStore.data.first()[deletedUserIdsKey] ?: emptySet()
-            _deletedUserIds.value = persisted
+            val prefs = dataStore.data.first()
+            _deletedUserIds.value       = prefs[deletedUserIdsKey]       ?: emptySet()
+            _deletedPrayerGoalIds.value = prefs[deletedPrayerGoalIdsKey] ?: emptySet()
         }
     }
+
+    // ── Users ────────────────────────────────────────────────────────────────
 
     suspend fun recordUserDeletion(id: String) {
         _deletedUserIds.value = _deletedUserIds.value + id
@@ -49,4 +56,17 @@ class DeletionTracker @Inject constructor(
     fun getDeletedUserIds(): Set<String> = _deletedUserIds.value
 
     fun isUserDeleted(id: String): Boolean = _deletedUserIds.value.contains(id)
+
+    // ── Prayer goals ─────────────────────────────────────────────────────────
+
+    suspend fun recordPrayerGoalDeletion(id: String) {
+        _deletedPrayerGoalIds.value = _deletedPrayerGoalIds.value + id
+        dataStore.edit { prefs ->
+            prefs[deletedPrayerGoalIdsKey] = (prefs[deletedPrayerGoalIdsKey] ?: emptySet()) + id
+        }
+    }
+
+    fun getDeletedPrayerGoalIds(): Set<String> = _deletedPrayerGoalIds.value
+
+    fun isPrayerGoalDeleted(id: String): Boolean = _deletedPrayerGoalIds.value.contains(id)
 }
