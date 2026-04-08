@@ -14,6 +14,7 @@ import com.familyhome.app.domain.model.CustomStockCategory
 import com.familyhome.app.domain.model.CustomStockCategoryDto
 import com.familyhome.app.domain.model.PrayerGoalSettingDto
 import com.familyhome.app.domain.model.PrayerLogDto
+import com.familyhome.app.domain.model.PrayerReminderDto
 import com.familyhome.app.domain.model.NotificationType
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.SyncPayload
@@ -71,6 +72,7 @@ class SyncServer @Inject constructor(
                 get("/ping")        { call.respond("pong") }
                 get("/sync/pull")   { handlePull(call) }
                 post("/sync/push")  { handlePush(call) }
+                post("/notify")     { handleDirectNotify(call) }
 
                 get("/onboarding/info")                  { handleOnboardingInfo(call) }
                 post("/onboarding/join-request")         { handleJoinRequest(call) }
@@ -130,6 +132,20 @@ class SyncServer @Inject constructor(
         payload.pusherId?.let { presenceTracker.update(it) }
         mergePayload(payload)
         postSyncNotifications(payload)
+        call.respond(mapOf("status" to "ok"))
+    }
+
+    /**
+     * Direct push from a member: receives a single [PrayerReminderDto] and shows
+     * an OS notification immediately if the leader is the target.
+     */
+    private suspend fun handleDirectNotify(call: ApplicationCall) {
+        val reminder = call.receive<PrayerReminderDto>()
+        prayerReminderStore.mergeReminders(listOf(reminder))
+        val leaderId = sessionRepository.getCurrentUserId()
+        if (leaderId != null) {
+            prayerReminderStore.processForCurrentUser(leaderId)
+        }
         call.respond(mapOf("status" to "ok"))
     }
 

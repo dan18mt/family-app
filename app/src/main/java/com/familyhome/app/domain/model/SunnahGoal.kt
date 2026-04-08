@@ -76,7 +76,7 @@ enum class SunnahGoal(
         reminderHour       = 7,
         reminderMinute     = 0,
         reminderEndHour    = 11,
-        reminderEndMinute  = 0,
+        reminderEndMinute  = 30,
     ),
     WITR(
         title       = "Shalat Witir",

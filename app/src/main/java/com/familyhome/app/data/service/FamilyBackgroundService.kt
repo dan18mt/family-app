@@ -13,6 +13,8 @@ import androidx.core.app.NotificationCompat
 import com.familyhome.app.MainActivity
 import com.familyhome.app.R
 import com.familyhome.app.data.onboarding.NsdHelper
+import com.familyhome.app.data.sync.MemberNotifyServer
+import com.familyhome.app.data.sync.MemberPresenceTracker
 import com.familyhome.app.data.sync.SyncRepositoryImpl
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.repository.SessionRepository
@@ -50,6 +52,8 @@ class FamilyBackgroundService : Service() {
     @Inject lateinit var userRepository: UserRepository
     @Inject lateinit var syncRepository: SyncRepositoryImpl
     @Inject lateinit var nsdHelper: NsdHelper
+    @Inject lateinit var presenceTracker: MemberPresenceTracker
+    @Inject lateinit var memberNotifyServer: MemberNotifyServer
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var networkingJob: Job? = null
@@ -83,11 +87,33 @@ class FamilyBackgroundService : Service() {
                                 port        = 8765,
                                 serviceType = NsdHelper.FATHER_SERVICE_TYPE,
                             )
+                            // Browse for member devices — update online status in real time
+                            nsdHelper.startMemberBrowsing()
+                            launch {
+                                nsdHelper.discoveredMembers.collect { members ->
+                                    val onlineUserIds = members.mapNotNull { device ->
+                                        // Service name convention: "FamilyHome_Member_{userId}"
+                                        device.serviceName
+                                            .removePrefix("FamilyHome_Member_")
+                                            .takeIf { it.isNotEmpty() && !it.startsWith("FamilyHome") }
+                                    }.toSet()
+                                    presenceTracker.setNetworkOnlineUsers(onlineUserIds)
+                                }
+                            }
                         }
                         else -> {
+                            // Start member notify server so the leader can push directly
+                            memberNotifyServer.start()
+                            // Advertise this member on NSD so the leader can discover our IP
+                            nsdHelper.startAdvertising(
+                                serviceName = "FamilyHome_Member_${user.id}",
+                                port        = MemberNotifyServer.PORT,
+                                serviceType = NsdHelper.MEMBER_SERVICE_TYPE,
+                            )
+                            // Also mark the leader as online if reachable (via sync ping)
                             while (isActive) {
-                                delay(AUTO_SYNC_INTERVAL_MS)
                                 syncRepository.syncWithHost()
+                                delay(AUTO_SYNC_INTERVAL_MS)
                             }
                         }
                     }
@@ -103,7 +129,9 @@ class FamilyBackgroundService : Service() {
     override fun onDestroy() {
         serviceScope.cancel()
         syncRepository.stopHostServer()
-        nsdHelper.stopAdvertising()
+        memberNotifyServer.stop()
+        nsdHelper.stopAll()
+        presenceTracker.setNetworkOnlineUsers(emptySet())
         super.onDestroy()
     }
 

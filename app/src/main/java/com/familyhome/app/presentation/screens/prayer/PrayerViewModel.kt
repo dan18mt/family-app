@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.familyhome.app.data.notification.PrayerReminderScheduler
 import com.familyhome.app.data.sync.DeletionTracker
+import com.familyhome.app.data.sync.MemberPresenceTracker
 import com.familyhome.app.data.sync.PrayerReminderStore
+import com.familyhome.app.data.sync.SyncRepositoryImpl
 import com.familyhome.app.domain.model.PrayerReminderDto
 import com.familyhome.app.domain.model.PrayerGoalSetting
 import com.familyhome.app.domain.model.PrayerLog
@@ -33,6 +35,11 @@ data class PrayerUiState(
     val error: String? = null,
     /** Non-null briefly after sending a reminder — consumed by the UI to show a Snackbar. */
     val reminderSentTo: String? = null,
+    /**
+     * IDs of family members currently online on the same Wi-Fi network.
+     * Populated from NSD discovery (real-time) and sync-based presence.
+     */
+    val onlineUserIds: Set<String> = emptySet(),
 ) {
     // ── Active goals ─────────────────────────────────────────────────────────
 
@@ -102,6 +109,8 @@ class PrayerViewModel @Inject constructor(
     private val deletionTracker: DeletionTracker,
     private val reminderScheduler: PrayerReminderScheduler,
     private val prayerReminderStore: PrayerReminderStore,
+    private val syncRepository: SyncRepositoryImpl,
+    private val presenceTracker: MemberPresenceTracker,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(PrayerUiState())
@@ -132,6 +141,12 @@ class PrayerViewModel @Inject constructor(
             val monthAgo = todayEpochDay() - 29L
             prayerRepository.getLogsSince(monthAgo).collect { logs ->
                 _state.update { it.copy(monthLogs = logs) }
+            }
+        }
+        // Track which family members are online on the same network (real-time)
+        viewModelScope.launch {
+            presenceTracker.networkOnlineUserIds.collect { onlineIds ->
+                _state.update { it.copy(onlineUserIds = onlineIds) }
             }
         }
     }
@@ -227,9 +242,18 @@ class PrayerViewModel @Inject constructor(
             prayerRepository.updateGoalSetting(setting.copy(reminderEnabled = newEnabled))
         }
         // Schedule or cancel the alarm
-        val hour = sunnah.reminderHour ?: return
+        val startHour   = sunnah.reminderHour ?: return
+        val startMinute = sunnah.reminderMinute ?: 0
         if (newEnabled) {
-            reminderScheduler.schedule(setting.sunnahKey, hour, sunnah.reminderMinute ?: 0)
+            reminderScheduler.schedule(
+                sunnahKey        = setting.sunnahKey,
+                hour             = startHour,
+                minute           = startMinute,
+                windowStartHour  = startHour,
+                windowStartMinute = startMinute,
+                windowEndHour    = sunnah.reminderEndHour ?: -1,
+                windowEndMinute  = sunnah.reminderEndMinute ?: 0,
+            )
         } else {
             reminderScheduler.cancel(setting.sunnahKey)
         }
@@ -245,21 +269,28 @@ class PrayerViewModel @Inject constructor(
     }
 
     /**
-     * Queue a reminder to [targetUserId] notifying them to complete their ibadah.
-     * The reminder is distributed to the target device on the next sync cycle.
+     * Send a prayer reminder to [targetUserId].
+     *
+     * When both devices are on the same Wi-Fi, the notification is delivered
+     * immediately via a direct HTTP push — no sync cycle needed, the target
+     * device doesn't need the app open. The reminder is also stored locally as
+     * a sync-based fallback for when the direct push fails or the device is
+     * temporarily unreachable.
      */
     fun sendReminder(targetUserId: String, targetUserName: String) {
         val sender = _state.value.currentUser ?: return
+        val reminder = PrayerReminderDto(
+            id           = UUID.randomUUID().toString(),
+            targetUserId = targetUserId,
+            sentByUserId = sender.id,
+            sentByName   = sender.name,
+            sentAt       = System.currentTimeMillis(),
+        )
         viewModelScope.launch {
-            prayerReminderStore.addReminder(
-                PrayerReminderDto(
-                    id           = UUID.randomUUID().toString(),
-                    targetUserId = targetUserId,
-                    sentByUserId = sender.id,
-                    sentByName   = sender.name,
-                    sentAt       = System.currentTimeMillis(),
-                )
-            )
+            // Always store for sync-based delivery (fallback)
+            prayerReminderStore.addReminder(reminder)
+            // Also attempt immediate direct push if on same network
+            syncRepository.sendDirectReminder(targetUserId, reminder)
             _state.update { it.copy(reminderSentTo = targetUserName) }
         }
     }

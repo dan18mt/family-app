@@ -1,5 +1,6 @@
 package com.familyhome.app.data.sync
 
+import com.familyhome.app.domain.model.PrayerReminderDto
 import com.familyhome.app.domain.model.SyncPayload
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -28,4 +29,17 @@ class SyncClient @Inject constructor(
             setBody(payload)
         }
     }
+
+    /**
+     * Push a single [PrayerReminderDto] directly to a device's `/notify` endpoint.
+     * Works for both the leader's server (port 8765) and member servers (port 8766).
+     * Returns `true` on HTTP 2xx, `false` on any error.
+     */
+    suspend fun pushNotification(targetIp: String, port: Int, reminder: PrayerReminderDto): Boolean =
+        runCatching {
+            httpClient.post("http://$targetIp:$port/notify") {
+                contentType(ContentType.Application.Json)
+                setBody(reminder)
+            }.status.isSuccess()
+        }.getOrDefault(false)
 }

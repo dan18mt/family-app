@@ -26,9 +26,16 @@ class PrayerReminderScheduler @Inject constructor(
     companion object {
         private const val TAG = "PrayerReminderScheduler"
 
-        const val EXTRA_SUNNAH_KEY     = "sunnah_key"
-        const val EXTRA_REMINDER_HOUR  = "reminder_hour"
-        const val EXTRA_REMINDER_MIN   = "reminder_minute"
+        const val EXTRA_SUNNAH_KEY       = "sunnah_key"
+        /** The time this specific alarm slot fires (changes each 15-min cycle). */
+        const val EXTRA_REMINDER_HOUR    = "reminder_hour"
+        const val EXTRA_REMINDER_MIN     = "reminder_minute"
+        /** Original window start — constant, used to reschedule for tomorrow. */
+        const val EXTRA_WINDOW_START_HOUR = "window_start_hour"
+        const val EXTRA_WINDOW_START_MIN  = "window_start_min"
+        /** Window end time — constant. -1 means no end (fire once daily). */
+        const val EXTRA_WINDOW_END_HOUR   = "window_end_hour"
+        const val EXTRA_WINDOW_END_MIN    = "window_end_min"
 
         private fun requestCode(sunnahKey: String): Int =
             ("prayer_reminder_$sunnahKey").hashCode() and 0x7FFFFFFF
@@ -36,14 +43,36 @@ class PrayerReminderScheduler @Inject constructor(
 
     private val alarmManager = context.getSystemService(AlarmManager::class.java)
 
-    /** Schedule (or reschedule) a daily reminder for [sunnahKey] at [hour]:[minute] local time. */
+    /**
+     * Schedule (or reschedule) a reminder for [sunnahKey].
+     *
+     * [hour]/[minute] = the slot to fire at (initial call = window start; subsequent calls =
+     * the next 15-min slot).
+     *
+     * [windowStartHour]/[windowStartMinute] = the original window start; kept constant in the
+     * intent so the receiver can reschedule for tomorrow at the right time.
+     *
+     * [windowEndHour] = -1 means no time window — fires once daily (original behaviour).
+     */
     @SuppressLint("MissingPermission")
-    fun schedule(sunnahKey: String, hour: Int, minute: Int) {
+    fun schedule(
+        sunnahKey: String,
+        hour: Int,
+        minute: Int,
+        windowStartHour: Int = hour,
+        windowStartMinute: Int = minute,
+        windowEndHour: Int = -1,
+        windowEndMinute: Int = 0,
+    ) {
         val triggerAt = nextOccurrence(hour, minute)
         val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
-            putExtra(EXTRA_SUNNAH_KEY,    sunnahKey)
-            putExtra(EXTRA_REMINDER_HOUR, hour)
-            putExtra(EXTRA_REMINDER_MIN,  minute)
+            putExtra(EXTRA_SUNNAH_KEY,        sunnahKey)
+            putExtra(EXTRA_REMINDER_HOUR,     hour)
+            putExtra(EXTRA_REMINDER_MIN,      minute)
+            putExtra(EXTRA_WINDOW_START_HOUR, windowStartHour)
+            putExtra(EXTRA_WINDOW_START_MIN,  windowStartMinute)
+            putExtra(EXTRA_WINDOW_END_HOUR,   windowEndHour)
+            putExtra(EXTRA_WINDOW_END_MIN,    windowEndMinute)
         }
         val pi = PendingIntent.getBroadcast(
             context,

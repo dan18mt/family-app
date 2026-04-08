@@ -8,12 +8,16 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Tracks when each family member last synced.
+ * Tracks family-member presence in two ways:
  *
- * On the leader's device: updated by [SyncServer] whenever it receives a push.
- * On member devices: updated by [SyncRepositoryImpl] from the pull response's presenceMap.
+ * 1. **Sync-based** ([lastSeen]): timestamp of last successful sync push/pull.
+ *    Updated by [SyncServer] (leader) and [SyncRepositoryImpl] (member).
  *
- * This enables all devices — not just the leader — to see each other's online status.
+ * 2. **Network-based** ([networkOnlineUserIds]): users whose device has been
+ *    discovered on the local Wi-Fi via mDNS (NSD). This is always up-to-date
+ *    without waiting for a sync cycle.
+ *
+ * [isOnline] returns `true` when either condition holds.
  */
 @Singleton
 class MemberPresenceTracker @Inject constructor() {
@@ -21,7 +25,11 @@ class MemberPresenceTracker @Inject constructor() {
     private val _lastSeen = MutableStateFlow<Map<String, Long>>(emptyMap())
     val lastSeen: StateFlow<Map<String, Long>> = _lastSeen.asStateFlow()
 
-    /** Mark [userId] as seen right now. */
+    /** User IDs currently visible on the same Wi-Fi network (via NSD discovery). */
+    private val _networkOnlineUserIds = MutableStateFlow<Set<String>>(emptySet())
+    val networkOnlineUserIds: StateFlow<Set<String>> = _networkOnlineUserIds.asStateFlow()
+
+    /** Mark [userId] as seen right now (sync-based). */
     fun update(userId: String) {
         _lastSeen.update { it + (userId to System.currentTimeMillis()) }
     }
@@ -30,18 +38,30 @@ class MemberPresenceTracker @Inject constructor() {
     fun updateWithTimestamp(userId: String, lastSeenAt: Long) {
         _lastSeen.update { current ->
             val existing = current[userId] ?: 0L
-            // Only update if the remote timestamp is more recent
             if (lastSeenAt > existing) current + (userId to lastSeenAt) else current
         }
     }
 
+    /**
+     * Replace the full set of users known to be on the same network right now.
+     * Called by [FamilyBackgroundService] whenever NSD discovery changes.
+     */
+    fun setNetworkOnlineUsers(userIds: Set<String>) {
+        _networkOnlineUserIds.value = userIds
+    }
+
+    /**
+     * Returns `true` when [userId] is online — either discovered on the same
+     * Wi-Fi (network-based, real-time) or synced within the last 2 minutes.
+     */
     fun isOnline(userId: String): Boolean {
+        if (userId in _networkOnlineUserIds.value) return true
         val seen = _lastSeen.value[userId] ?: return false
         return System.currentTimeMillis() - seen < ONLINE_THRESHOLD_MS
     }
 
     companion object {
-        /** Members seen within 2 minutes are considered online. */
+        /** Sync-based threshold: members synced within 2 minutes are considered online. */
         const val ONLINE_THRESHOLD_MS = 2 * 60 * 1_000L
     }
 }

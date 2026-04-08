@@ -7,10 +7,12 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.familyhome.app.data.mapper.*
 import com.familyhome.app.data.notification.AlarmScheduler
 import com.familyhome.app.data.notification.LowStockNotifier
+import com.familyhome.app.data.onboarding.NsdHelper
 import com.familyhome.app.domain.model.CustomExpenseCategory
 import com.familyhome.app.domain.model.CustomExpenseCategoryDto
 import com.familyhome.app.domain.model.CustomStockCategory
 import com.familyhome.app.domain.model.CustomStockCategoryDto
+import com.familyhome.app.domain.model.PrayerReminderDto
 import com.familyhome.app.domain.model.SyncPayload
 import com.familyhome.app.domain.model.SyncResult
 import com.familyhome.app.domain.repository.*
@@ -43,6 +45,7 @@ class SyncRepositoryImpl @Inject constructor(
     private val presenceTracker: MemberPresenceTracker,
     private val deletionTracker: DeletionTracker,
     private val prayerReminderStore: PrayerReminderStore,
+    private val nsdHelper: NsdHelper,
 ) {
     private val lastSyncKey = longPreferencesKey("last_sync_time")
     private val hostIpKey   = stringPreferencesKey("sync_host_ip")
@@ -91,6 +94,32 @@ class SyncRepositoryImpl @Inject constructor(
 
     fun getLastSyncTimeFlow(): Flow<Long?> =
         context.dataStore.data.map { it[lastSyncKey] }
+
+    // ── Direct push (same-network) ───────────────────────────────────────────
+
+    /**
+     * Attempts to deliver [reminder] directly to the target device over local Wi-Fi.
+     *
+     * - If the target is a **member** (non-leader): looks up their IP in
+     *   [NsdHelper.discoveredMembers] and POSTs to port [MemberNotifyServer.PORT].
+     * - If the target is the **leader**: POSTs to the stored host IP on [syncPort].
+     *
+     * Returns `true` when the push was accepted (HTTP 2xx). Callers should still
+     * store the reminder in [PrayerReminderStore] as a sync-based fallback.
+     */
+    suspend fun sendDirectReminder(targetUserId: String, reminder: PrayerReminderDto): Boolean {
+        // Try member server first (advertised via NSD)
+        val memberDevice = nsdHelper.discoveredMembers.value.firstOrNull { device ->
+            device.serviceName == "FamilyHome_Member_$targetUserId"
+        }
+        if (memberDevice != null) {
+            return syncClient.pushNotification(memberDevice.hostAddress, MemberNotifyServer.PORT, reminder)
+        }
+
+        // Fallback: try the leader's server at the stored host IP
+        val hostIp = context.dataStore.data.first()[hostIpKey] ?: return false
+        return syncClient.pushNotification(hostIp, syncPort, reminder)
+    }
 
     // ── Internal helpers ─────────────────────────────────────────────────────
 

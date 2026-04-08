@@ -15,6 +15,7 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import java.util.Calendar
 
 @EntryPoint
 @InstallIn(SingletonComponent::class)
@@ -32,25 +33,71 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
 
     companion object {
         const val CHANNEL_ID = "prayer_reminders"
+        private const val INTERVAL_MINUTES = 15
+        private const val INTERVAL_MS = INTERVAL_MINUTES * 60 * 1_000L
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        val sunnahKey    = intent.getStringExtra(PrayerReminderScheduler.EXTRA_SUNNAH_KEY) ?: return
-        val hour         = intent.getIntExtra(PrayerReminderScheduler.EXTRA_REMINDER_HOUR, -1)
-        val minute       = intent.getIntExtra(PrayerReminderScheduler.EXTRA_REMINDER_MIN, 0)
+        val sunnahKey      = intent.getStringExtra(PrayerReminderScheduler.EXTRA_SUNNAH_KEY) ?: return
+        val windowStartH   = intent.getIntExtra(PrayerReminderScheduler.EXTRA_WINDOW_START_HOUR, -1)
+        val windowStartMin = intent.getIntExtra(PrayerReminderScheduler.EXTRA_WINDOW_START_MIN, 0)
+        val windowEndH     = intent.getIntExtra(PrayerReminderScheduler.EXTRA_WINDOW_END_HOUR, -1)
+        val windowEndMin   = intent.getIntExtra(PrayerReminderScheduler.EXTRA_WINDOW_END_MIN, 0)
 
         val sunnah = SunnahGoal.entries.firstOrNull { it.name == sunnahKey } ?: return
 
         ensureChannel(context)
         showNotification(context, sunnah)
 
-        // Reschedule for tomorrow to keep the daily cycle alive
-        if (hour >= 0) {
-            val ep = EntryPointAccessors.fromApplication(
-                context.applicationContext,
-                PrayerAlarmEntryPoint::class.java,
+        if (windowStartH < 0) return  // no start time stored — nothing to reschedule
+
+        val ep = EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            PrayerAlarmEntryPoint::class.java,
+        )
+        val scheduler = ep.prayerReminderScheduler()
+
+        if (windowEndH < 0) {
+            // No end boundary — fire once daily, reschedule for tomorrow at start
+            scheduler.schedule(
+                sunnahKey,
+                windowStartH, windowStartMin,
+                windowStartH, windowStartMin,
             )
-            ep.prayerReminderScheduler().schedule(sunnahKey, hour, minute)
+            return
+        }
+
+        // ── 15-minute cycling within window ─────────────────────────────────
+        // Compute the next 15-min slot (~now + 15 min, normalised to the minute)
+        val nextCal = Calendar.getInstance().apply {
+            timeInMillis = System.currentTimeMillis() + INTERVAL_MS
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val nextH   = nextCal.get(Calendar.HOUR_OF_DAY)
+        val nextMin = nextCal.get(Calendar.MINUTE)
+
+        // Last permitted slot = window end − 15 min
+        val endTotalMin  = windowEndH * 60 + windowEndMin
+        val lastSlotMin  = endTotalMin - INTERVAL_MINUTES
+        val nextTotalMin = nextH * 60 + nextMin
+
+        if (nextTotalMin <= lastSlotMin) {
+            // Still inside the window — schedule the next slot
+            scheduler.schedule(
+                sunnahKey,
+                nextH, nextMin,
+                windowStartH, windowStartMin,
+                windowEndH, windowEndMin,
+            )
+        } else {
+            // Window exhausted for today — reschedule for tomorrow at window start
+            scheduler.schedule(
+                sunnahKey,
+                windowStartH, windowStartMin,
+                windowStartH, windowStartMin,
+                windowEndH, windowEndMin,
+            )
         }
     }
 
