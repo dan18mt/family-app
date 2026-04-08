@@ -114,8 +114,17 @@ private fun NotificationItem(
     val statusLabel = when {
         notification.isSilenced -> "Silenced"
         notification.snoozedUntil != null && !notification.isActive -> {
-            val remaining = (notification.snoozedUntil - System.currentTimeMillis()) / 60_000
-            "Snoozed ${remaining}m"
+            val remainingMs  = notification.snoozedUntil - System.currentTimeMillis()
+            val remainingMin = remainingMs / 60_000L
+            when {
+                remainingMin <= 0L -> "Snoozed <1m"
+                remainingMin < 60L -> "Snoozed ${remainingMin}m"
+                else -> {
+                    val h = remainingMin / 60L
+                    val m = remainingMin % 60L
+                    if (m == 0L) "Snoozed ${h}h" else "Snoozed ${h}h ${m}m"
+                }
+            }
         }
         else -> null
     }

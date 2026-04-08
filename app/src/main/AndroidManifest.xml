@@ -79,6 +79,16 @@
             android:name=".data.notification.PrayerAlarmReceiver"
             android:exported="false" />
 
+        <!-- Handles inline Snooze / Silence actions on low-stock OS notifications -->
+        <receiver
+            android:name=".data.notification.StockNotificationActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.familyhome.app.STOCK_SNOOZE_1H" />
+                <action android:name="com.familyhome.app.STOCK_SILENCE" />
+            </intent-filter>
+        </receiver>
+
         <!-- Background service for networking, sync, and NSD discovery -->
         <service
             android:name=".data.service.FamilyBackgroundService"

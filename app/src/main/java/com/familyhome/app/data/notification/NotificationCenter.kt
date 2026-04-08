@@ -195,6 +195,65 @@ class NotificationCenter @Inject constructor(
         }
     }
 
+    // ── Source-ID helpers (used by OS notification action receivers) ─────────
+
+    /**
+     * Returns `true` when the logical event identified by [sourceId] should NOT
+     * trigger a new OS notification: it has been explicitly dismissed, silenced,
+     * or has an active (still-future) snooze.
+     *
+     * Uses the in-memory mirrors which are populated from DataStore on startup.
+     * Synchronous and safe to call from any thread.
+     */
+    fun isSuppressed(sourceId: String): Boolean {
+        if (sourceId in dismissedSourceIds) return true
+        if (sourceId in silencedSourceIds)  return true
+        return snoozeMap[sourceId]?.let { it > System.currentTimeMillis() } ?: false
+    }
+
+    /**
+     * Returns `true` when [sourceId] had a snooze that was set during this
+     * session or loaded from a previous session, and that snooze has now expired.
+     * Used to re-enable the OS notification after the user's chosen delay.
+     */
+    fun hasSnoozeExpired(sourceId: String): Boolean {
+        val until = snoozeMap[sourceId] ?: return false
+        return System.currentTimeMillis() > until
+    }
+
+    /**
+     * Silence the notification identified by [sourceId] directly, without
+     * needing its UUID. Safe to call from a BroadcastReceiver that only knows
+     * the sourceId (e.g. an OS notification inline action).
+     */
+    fun silenceBySourceId(sourceId: String) {
+        _notifications.update { list ->
+            list.map {
+                if (it.sourceId == sourceId) it.copy(isSilenced = true, isRead = true) else it
+            }
+        }
+        silencedSourceIds = silencedSourceIds + sourceId
+        scope.launch {
+            dataStore.edit { prefs -> prefs[silencedKey] = silencedSourceIds }
+        }
+    }
+
+    /**
+     * Snooze the notification identified by [sourceId] until [untilMillis],
+     * without needing its UUID.
+     */
+    fun snoozeBySourceId(sourceId: String, untilMillis: Long) {
+        _notifications.update { list ->
+            list.map {
+                if (it.sourceId == sourceId) it.copy(snoozedUntil = untilMillis, isRead = true) else it
+            }
+        }
+        snoozeMap = snoozeMap + (sourceId to untilMillis)
+        scope.launch {
+            dataStore.edit { prefs -> prefs[snoozeKey] = snoozeMap.encodeSnoozeSet() }
+        }
+    }
+
     /**
      * Clear all notifications permanently. Any sourceId that was visible is added to the
      * dismissed set so that sync re-posts never bring them back.
