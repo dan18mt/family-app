@@ -44,7 +44,6 @@ import com.familyhome.app.domain.model.PrayerGoalSetting
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.SunnahGoal
 import com.familyhome.app.domain.model.User
-import com.familyhome.app.presentation.components.FamilyBottomBar
 import com.familyhome.app.presentation.components.SectionHeader
 import com.familyhome.app.presentation.navigation.Screen
 import java.util.Calendar
@@ -100,7 +99,6 @@ fun PrayerScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar    = { FamilyBottomBar(currentRoute = currentTabRoute, onNavigate = onNavigateToTab) },
         topBar = {
             TopAppBar(
                 title = {

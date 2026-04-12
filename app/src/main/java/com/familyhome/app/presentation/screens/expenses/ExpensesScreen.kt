@@ -29,7 +29,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.res.stringResource
 import com.familyhome.app.R
 import com.familyhome.app.domain.model.*
-import com.familyhome.app.presentation.components.FamilyBottomBar
 import com.familyhome.app.presentation.components.LoadingScreen
 import com.familyhome.app.presentation.navigation.Screen
 import com.familyhome.app.presentation.theme.BudgetWarningColor
@@ -143,7 +142,6 @@ fun ExpensesScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar    = { FamilyBottomBar(currentRoute = currentTabRoute, onNavigate = onNavigateToTab) },
         topBar = {
             TopAppBar(
                 title = { Text("Expenses") },

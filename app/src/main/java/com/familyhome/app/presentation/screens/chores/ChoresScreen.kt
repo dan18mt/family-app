@@ -21,7 +21,6 @@ import com.familyhome.app.domain.model.Frequency
 import com.familyhome.app.domain.model.RecurringTask
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.User
-import com.familyhome.app.presentation.components.FamilyBottomBar
 import com.familyhome.app.presentation.components.LoadingScreen
 import com.familyhome.app.presentation.navigation.Screen
 import java.text.SimpleDateFormat
@@ -105,7 +104,6 @@ fun ChoresScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar    = { FamilyBottomBar(currentRoute = currentTabRoute, onNavigate = onNavigateToTab) },
         topBar = {
             TopAppBar(
                 title = { Text("Chores") },

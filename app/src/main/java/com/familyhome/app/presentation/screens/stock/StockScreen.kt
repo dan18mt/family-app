@@ -21,7 +21,6 @@ import com.familyhome.app.domain.model.CustomStockCategory
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.StockCategory
 import com.familyhome.app.domain.model.StockItem
-import com.familyhome.app.presentation.components.FamilyBottomBar
 import com.familyhome.app.presentation.components.LowStockBadge
 import com.familyhome.app.presentation.components.LoadingScreen
 import com.familyhome.app.presentation.navigation.Screen
@@ -113,7 +112,6 @@ fun StockScreen(
                 }
             )
         },
-        bottomBar = { FamilyBottomBar(currentRoute = currentTabRoute, onNavigate = onNavigateToTab) },
         floatingActionButton = {
             if (state.currentUser?.role != Role.KID) {
                 FloatingActionButton(onClick = onAddItem) {

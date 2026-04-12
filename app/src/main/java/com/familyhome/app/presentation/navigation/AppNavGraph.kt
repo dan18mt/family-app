@@ -56,6 +56,12 @@ fun AppNavGraph(
         }
     }
 
+    // Navigate to a Screen: use tab-switching logic for main tabs, plain navigate for others
+    val navigateTo: (Screen) -> Unit = { screen ->
+        if (screen.route in MAIN_TAB_ROUTES) navigateToTab(screen.route)
+        else navController.navigate(screen.route)
+    }
+
     Scaffold(
         bottomBar = {
             if (currentRoute in MAIN_TAB_ROUTES) {
@@ -159,7 +165,7 @@ fun AppNavGraph(
             // ── Main tabs ─────────────────────────────────────────────────────────
             composable(Screen.Home.route) {
                 HomeScreen(
-                    onNavigateTo    = { navController.navigate(it.route) },
+                    onNavigateTo    = navigateTo,
                     onNavigateToTab = navigateToTab,
                     currentTabRoute = Screen.Home.route,
                 )
