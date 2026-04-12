@@ -44,7 +44,9 @@ import com.familyhome.app.domain.model.PrayerGoalSetting
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.SunnahGoal
 import com.familyhome.app.domain.model.User
+import com.familyhome.app.presentation.components.FamilyBottomBar
 import com.familyhome.app.presentation.components.SectionHeader
+import com.familyhome.app.presentation.navigation.Screen
 import java.util.Calendar
 
 // ── Color palette ─────────────────────────────────────────────────────────────
@@ -66,6 +68,8 @@ private enum class ProgressPeriod(val labelRes: Int, val days: Long) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrayerScreen(
+    onNavigateToTab: (String) -> Unit = {},
+    currentTabRoute: String = Screen.Prayer.route,
     viewModel: PrayerViewModel = hiltViewModel(),
 ) {
     val state       by viewModel.state.collectAsStateWithLifecycle()
@@ -96,6 +100,7 @@ fun PrayerScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar    = { FamilyBottomBar(currentRoute = currentTabRoute, onNavigate = onNavigateToTab) },
         topBar = {
             TopAppBar(
                 title = {

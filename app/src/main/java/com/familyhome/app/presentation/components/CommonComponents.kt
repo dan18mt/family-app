@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -170,13 +169,26 @@ fun LowStockBadge(modifier: Modifier = Modifier) {
 // ── Section header ────────────────────────────────────────────────────────────
 
 @Composable
-fun SectionHeader(title: String, modifier: Modifier = Modifier) {
-    Text(
-        text     = title,
-        style    = MaterialTheme.typography.titleSmall,
-        color    = MaterialTheme.colorScheme.primary,
-        modifier = modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-    )
+fun SectionHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+    action: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier              = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(top = 16.dp, bottom = 8.dp),
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text  = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        action?.invoke()
+    }
 }
 
 // ── PIN dots ──────────────────────────────────────────────────────────────────
@@ -219,11 +231,11 @@ private data class BottomNavItem(
 )
 
 private val bottomNavItems = listOf(
-    BottomNavItem("home",     "Home",     Icons.Default.Home),
-    BottomNavItem("stock",    "Pantry",   Icons.Default.Kitchen),
-    BottomNavItem("chores",   "Chores",   Icons.Default.CheckCircle),
-    BottomNavItem("expenses", "Budget",   Icons.Default.AccountBalanceWallet),
-    BottomNavItem("chat",     "AI Chat",  Icons.AutoMirrored.Filled.Chat),
+    BottomNavItem("home",     "Home",    Icons.Default.Home),
+    BottomNavItem("stock",    "Pantry",  Icons.Default.Kitchen),
+    BottomNavItem("chores",   "Chores",  Icons.Default.CheckCircle),
+    BottomNavItem("expenses", "Budget",  Icons.Default.AccountBalanceWallet),
+    BottomNavItem("prayer",   "Ibadah",  Icons.Default.AutoAwesome),
 )
 
 @Composable
@@ -232,14 +244,14 @@ fun FamilyBottomBar(
     onNavigate: (String) -> Unit,
 ) {
     NavigationBar(
-        tonalElevation = 0.dp,
+        tonalElevation = 3.dp,
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
         bottomNavItems.forEach { item ->
             val selected = currentRoute == item.route
             NavigationBarItem(
                 selected = selected,
-                onClick  = { onNavigate(item.route) },
+                onClick  = { if (!selected) onNavigate(item.route) },
                 icon     = {
                     Icon(
                         imageVector        = item.icon,
@@ -248,6 +260,7 @@ fun FamilyBottomBar(
                     )
                 },
                 label  = { Text(item.label, style = MaterialTheme.typography.labelSmall) },
+                alwaysShowLabel = true,
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor   = MaterialTheme.colorScheme.primary,
                     selectedTextColor   = MaterialTheme.colorScheme.primary,

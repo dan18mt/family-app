@@ -60,6 +60,11 @@ val OnSurfaceVariantDark      = Color(0xFFBFC9C0)
 val OutlineDark               = Color(0xFF89938A)
 val OutlineVariantDark        = Color(0xFF404943)
 
+// ── Surface elevations (supplement Material3 surfaceVariant for cards) ────────
+val SurfaceContainerLowest    = Color(0xFFF0F7F2)   // barely-tinted background
+val SurfaceContainerLow       = Color(0xFFEAF3ED)
+val SurfaceContainerHigh      = Color(0xFFDCEDE2)
+
 // ── Semantic colours ─────────────────────────────────────────────────────────
 val LowStockColor             = Color(0xFFBA1A1A)
 val LowStockBackground        = Color(0xFFFFDAD6)

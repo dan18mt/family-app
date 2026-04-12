@@ -29,7 +29,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.res.stringResource
 import com.familyhome.app.R
 import com.familyhome.app.domain.model.*
+import com.familyhome.app.presentation.components.FamilyBottomBar
 import com.familyhome.app.presentation.components.LoadingScreen
+import com.familyhome.app.presentation.navigation.Screen
 import com.familyhome.app.presentation.theme.BudgetWarningColor
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -74,6 +76,8 @@ fun expenseCategoryIcon(cat: ExpenseCategory): ImageVector = when (cat) {
 @Composable
 fun ExpensesScreen(
     onAddExpense: () -> Unit,
+    onNavigateToTab: (String) -> Unit = {},
+    currentTabRoute: String = Screen.Expenses.route,
     viewModel: ExpensesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -139,6 +143,7 @@ fun ExpensesScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar    = { FamilyBottomBar(currentRoute = currentTabRoute, onNavigate = onNavigateToTab) },
         topBar = {
             TopAppBar(
                 title = { Text("Expenses") },

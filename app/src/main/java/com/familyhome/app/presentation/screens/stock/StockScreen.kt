@@ -21,8 +21,10 @@ import com.familyhome.app.domain.model.CustomStockCategory
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.StockCategory
 import com.familyhome.app.domain.model.StockItem
+import com.familyhome.app.presentation.components.FamilyBottomBar
 import com.familyhome.app.presentation.components.LowStockBadge
 import com.familyhome.app.presentation.components.LoadingScreen
+import com.familyhome.app.presentation.navigation.Screen
 
 private val STOCK_CATEGORY_ICON_OPTIONS: List<Pair<String, ImageVector>> = listOf(
     "ShoppingCart"    to Icons.Default.ShoppingCart,
@@ -55,6 +57,8 @@ private fun builtInCategoryIcon(cat: StockCategory): ImageVector = when (cat) {
 @Composable
 fun StockScreen(
     onAddItem: () -> Unit,
+    onNavigateToTab: (String) -> Unit = {},
+    currentTabRoute: String = Screen.Stock.route,
     viewModel: StockViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -109,6 +113,7 @@ fun StockScreen(
                 }
             )
         },
+        bottomBar = { FamilyBottomBar(currentRoute = currentTabRoute, onNavigate = onNavigateToTab) },
         floatingActionButton = {
             if (state.currentUser?.role != Role.KID) {
                 FloatingActionButton(onClick = onAddItem) {
