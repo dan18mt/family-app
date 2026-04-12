@@ -22,6 +22,8 @@ data class SyncPayload(
     val deletedUserIds: List<String>? = null,
     /** Prayer-goal IDs deleted by the leader; members must remove these locally. */
     val deletedPrayerGoalIds: List<String>? = null,
+    /** Budget IDs deleted by the leader; members must remove these locally. */
+    val deletedBudgetIds: List<String>? = null,
     /** Family-sent prayer reminders; distributed via the leader's server to all clients. */
     val prayerReminders: List<PrayerReminderDto>? = null,
     /** userId → last-seen epoch-ms map; used to propagate presence to all devices. */

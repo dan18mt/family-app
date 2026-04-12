@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -1056,31 +1058,41 @@ private fun ManageBudgetsDialog(
                 if (budgets.isEmpty()) {
                     Text("No budgets set.", style = MaterialTheme.typography.bodyMedium)
                 } else {
-                    budgets.forEach { budget ->
-                        val targetName = when {
-                            budget.targetUserId == null -> "All family"
-                            else -> allUsers.find { it.id == budget.targetUserId }?.name ?: "Unknown"
-                        }
-                        ListItem(
-                            headlineContent   = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    budget.category?.let { cat ->
-                                        Icon(expenseCategoryIcon(cat), null, modifier = Modifier.size(16.dp))
-                                        Spacer(Modifier.width(4.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 300.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        budgets.forEach { budget ->
+                            val targetName = when {
+                                budget.targetUserId == null -> "All family"
+                                else -> allUsers.find { it.id == budget.targetUserId }?.name ?: "Unknown"
+                            }
+                            ListItem(
+                                headlineContent   = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        budget.category?.let { cat ->
+                                            Icon(expenseCategoryIcon(cat), null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                        }
+                                        Text("${budget.category?.displayName ?: "Overall"} · $targetName")
                                     }
-                                    Text("${budget.category?.displayName ?: "Overall"} · $targetName")
-                                }
-                            },
-                            supportingContent = {
-                                Text("${currFmt.format(budget.limitAmount / 100.0)} / ${budget.period.displayName}")
-                            },
-                            trailingContent = {
-                                IconButton(onClick = { onDelete(budget) }) {
-                                    Icon(Icons.Default.Delete, "Delete",
-                                        tint = MaterialTheme.colorScheme.error)
-                                }
-                            },
-                        )
+                                },
+                                supportingContent = {
+                                    Text("${currFmt.format(budget.limitAmount / 100.0)} / ${budget.period.displayName}")
+                                },
+                                trailingContent = {
+                                    IconButton(onClick = { onDelete(budget) }) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete budget",
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
             }

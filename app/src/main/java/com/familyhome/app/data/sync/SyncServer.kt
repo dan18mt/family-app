@@ -120,6 +120,7 @@ class SyncServer @Inject constructor(
                 .map { PrayerLogDto(it.id, it.userId, it.sunnahKey, it.epochDay, it.completedCount, it.loggedAt) },
             deletedUserIds          = deletionTracker.getDeletedUserIds().toList().ifEmpty { null },
             deletedPrayerGoalIds    = deletionTracker.getDeletedPrayerGoalIds().toList().ifEmpty { null },
+            deletedBudgetIds        = deletionTracker.getDeletedBudgetIds().toList().ifEmpty { null },
             prayerReminders         = prayerReminderStore.getActiveReminders().ifEmpty { null },
             presenceMap             = presenceMap.ifEmpty { null },
             leaderId                = father?.id,
@@ -186,7 +187,11 @@ class SyncServer @Inject constructor(
         payload.recurringTasks?.let        { choreRepository.upsertAllRecurring(it.map { dto -> dto.toDomain() }) }
         payload.choreAssignments?.let      { choreRepository.upsertAllAssignments(it.map { dto -> dto.toAssignmentDomain() }) }
         payload.expenses?.let              { expenseRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
-        payload.budgets?.let               { budgetRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.budgets?.let { dtos ->
+            val deletedBudgetIds = deletionTracker.getDeletedBudgetIds()
+            val toUpsert = dtos.filter { it.id !in deletedBudgetIds }
+            if (toUpsert.isNotEmpty()) budgetRepository.upsertAll(toUpsert.map { it.toDomain() })
+        }
         payload.customStockCategories?.let {
             customStockCategoryRepository.upsertAll(
                 it.map { dto -> CustomStockCategory(dto.id, dto.name, dto.iconName) }

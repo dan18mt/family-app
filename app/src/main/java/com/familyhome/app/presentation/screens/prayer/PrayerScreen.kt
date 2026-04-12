@@ -8,9 +8,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -50,6 +52,14 @@ private val PrayerGreen      = Color(0xFF1B4332)
 private val PrayerGreenLight = Color(0xFF2D6A4F)
 private val PrayerGold       = Color(0xFFD4A017)
 private val PrayerGoldLight  = Color(0xFFF5C842)
+
+// ── Period selector ───────────────────────────────────────────────────────────
+private enum class ProgressPeriod(val labelRes: Int, val days: Long) {
+    TODAY(R.string.prayer_period_today, 0L),
+    WEEK(R.string.prayer_period_week, 6L),
+    MONTH(R.string.prayer_period_month, 29L),
+    THREE_MONTHS(R.string.prayer_period_3months, 89L),
+}
 
 // ── Root composable ───────────────────────────────────────────────────────────
 
@@ -745,52 +755,96 @@ private fun FamilyStatsTab(
     onSendReminder: (userId: String, name: String) -> Unit,
 ) {
     val userId  = currentUser?.id ?: return
-    val today   = remember { System.currentTimeMillis() / (24 * 60 * 60 * 1000L) }
+    val today   = remember { System.currentTimeMillis() / PrayerUiState.DAY_MS }
     val langTag = LocalContext.current.resources.configuration.locales[0].language
+
+    var selectedPeriod   by remember { mutableStateOf(ProgressPeriod.TODAY) }
+    var expandedMemberId by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         contentPadding      = PaddingValues(bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        // ── Family Today ──────────────────────────────────────────────────
+        // ── Period filter ─────────────────────────────────────────────────
         item {
-            SectionHeader(stringResource(R.string.prayer_family_today))
-        }
-        items(state.allUsers) { member ->
-            val active    = state.activeGoalsFor(member.id).size
-            val completed = state.completedTodayCount(member.id)
-            val rate      = if (active > 0) completed.toFloat() / active else 0f
-            MemberProgressRow(
-                member         = member,
-                completed      = completed,
-                total          = active,
-                rate           = rate,
-                isMe           = member.id == userId,
-                onSendReminder = if (member.id != userId && rate < 1f)
-                    { -> onSendReminder(member.id, member.name) }
-                else null,
+            PeriodFilterChips(
+                selected = selectedPeriod,
+                onSelect = { period ->
+                    selectedPeriod   = period
+                    expandedMemberId = null
+                },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
         }
 
+        // ── Family Progress ───────────────────────────────────────────────
+        item {
+            SectionHeader(
+                if (selectedPeriod == ProgressPeriod.TODAY)
+                    stringResource(R.string.prayer_family_today)
+                else
+                    stringResource(R.string.prayer_family_progress),
+            )
+        }
+        items(state.allUsers, key = { it.id }) { member ->
+            val fromDay      = today - selectedPeriod.days
+            val periodDays   = (selectedPeriod.days + 1).toInt()
+            val isMe         = member.id == userId
+            val activeGoals  = state.activeGoalsFor(member.id)
+            val isExpanded   = expandedMemberId == member.id
+
+            val (primaryLabel, rate) = when (selectedPeriod) {
+                ProgressPeriod.TODAY -> {
+                    val completed = state.completedTodayCount(member.id)
+                    val total     = activeGoals.size
+                    val r         = if (total > 0) completed.toFloat() / total else 0f
+                    "$completed/$total goals" to r
+                }
+                else -> {
+                    val completedDays = state.completedDaysInPeriod(member.id, fromDay, today)
+                    val r             = if (periodDays > 0) completedDays.toFloat() / periodDays else 0f
+                    "$completedDays/$periodDays ${stringResource(R.string.prayer_days_completed)}" to r
+                }
+            }
+
+            FamilyMemberProgressRow(
+                member        = member,
+                primaryLabel  = primaryLabel,
+                rate          = rate,
+                isMe          = isMe,
+                isExpanded    = isExpanded,
+                onToggleExpand = { expandedMemberId = if (isExpanded) null else member.id },
+                onSendReminder = if (!isMe && selectedPeriod == ProgressPeriod.TODAY && rate < 1f)
+                    { -> onSendReminder(member.id, member.name) }
+                else null,
+            )
+            // ── Expandable per-goal breakdown ─────────────────────────────
+            if (isExpanded) {
+                GoalBreakdown(
+                    member   = member,
+                    state    = state,
+                    today    = today,
+                    fromDay  = fromDay,
+                    period   = selectedPeriod,
+                    langTag  = langTag,
+                )
+            }
+        }
+
         // ── My Weekly Chart ───────────────────────────────────────────────
-        item {
-            SectionHeader(stringResource(R.string.prayer_my_weekly))
-        }
-        item {
-            WeeklyBarChart(userId = userId, state = state, today = today)
-        }
+        item { SectionHeader(stringResource(R.string.prayer_my_weekly)) }
+        item { WeeklyBarChart(userId = userId, state = state, today = today) }
 
         // ── My Monthly Heatmap ────────────────────────────────────────────
-        item {
-            SectionHeader(stringResource(R.string.prayer_my_monthly))
-        }
-        item {
-            MonthlyHeatmap(userId = userId, state = state, today = today)
-        }
+        item { SectionHeader(stringResource(R.string.prayer_my_monthly)) }
+        item { MonthlyHeatmap(userId = userId, state = state, today = today) }
+
+        // ── 3-Month Overview ──────────────────────────────────────────────
+        item { SectionHeader(stringResource(R.string.prayer_my_quarterly)) }
+        item { QuarterlyHeatmap(userId = userId, state = state, today = today) }
 
         // ── Achievements ──────────────────────────────────────────────────
-        val activeGoals   = state.activeGoalsFor(userId)
-        val earnedRewards = activeGoals.mapNotNull { it.sunnah }.filter { sunnah ->
+        val earnedRewards = state.activeGoalsFor(userId).mapNotNull { it.sunnah }.filter { sunnah ->
             state.todayLogFor(sunnah.name, userId)?.isCompleted == true
         }
         if (earnedRewards.isNotEmpty()) {
@@ -802,21 +856,50 @@ private fun FamilyStatsTab(
     }
 }
 
+// ── Period filter chips ───────────────────────────────────────────────────────
+
 @Composable
-private fun MemberProgressRow(
+private fun PeriodFilterChips(
+    selected: ProgressPeriod,
+    onSelect: (ProgressPeriod) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier              = modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        ProgressPeriod.entries.forEach { period ->
+            FilterChip(
+                selected = period == selected,
+                onClick  = { onSelect(period) },
+                label    = { Text(stringResource(period.labelRes), style = MaterialTheme.typography.labelMedium) },
+                colors   = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor  = PrayerGreenLight,
+                    selectedLabelColor      = Color.White,
+                ),
+            )
+        }
+    }
+}
+
+// ── Family member progress row (with expansion) ───────────────────────────────
+
+@Composable
+private fun FamilyMemberProgressRow(
     member: User,
-    completed: Int,
-    total: Int,
+    primaryLabel: String,
     rate: Float,
     isMe: Boolean,
-    /** Non-null when a remind button should be shown; null for self or already-complete members. */
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
     onSendReminder: (() -> Unit)?,
 ) {
     Column {
         Row(
             modifier              = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .clickable(onClick = onToggleExpand)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -847,7 +930,7 @@ private fun MemberProgressRow(
                         fontWeight = FontWeight.Medium,
                     )
                     Text(
-                        if (total > 0) "$completed/$total" else "—",
+                        primaryLabel,
                         style = MaterialTheme.typography.bodySmall,
                         color = if (rate >= 1f) PrayerGreenLight
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -869,6 +952,14 @@ private fun MemberProgressRow(
                 )
             }
 
+            // Expand chevron
+            Icon(
+                if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = stringResource(R.string.prayer_goal_details),
+                tint     = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(20.dp),
+            )
+
             // Remind button — only for other members who haven't completed yet
             if (onSendReminder != null) {
                 IconButton(
@@ -887,10 +978,147 @@ private fun MemberProgressRow(
                 }
             }
         }
-        HorizontalDivider(
-            modifier  = Modifier.padding(horizontal = 16.dp),
-            thickness = 0.5.dp,
-        )
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp)
+    }
+}
+
+// ── Per-goal breakdown (shown when member row is expanded) ────────────────────
+
+@Composable
+private fun GoalBreakdown(
+    member: User,
+    state: PrayerUiState,
+    today: Long,
+    fromDay: Long,
+    period: ProgressPeriod,
+    langTag: String,
+) {
+    val activeGoals = state.activeGoalsFor(member.id)
+    if (activeGoals.isEmpty()) return
+
+    Card(
+        modifier  = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 8.dp),
+        shape     = RoundedCornerShape(12.dp),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(0.dp),
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                stringResource(R.string.prayer_goal_details),
+                style      = MaterialTheme.typography.labelSmall,
+                color      = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.SemiBold,
+            )
+            activeGoals.forEach { goal ->
+                val sunnah = goal.sunnah ?: return@forEach
+                val (progressLabel, isDone) = when (period) {
+                    ProgressPeriod.TODAY -> {
+                        val log      = state.todayLogFor(sunnah.name, member.id)
+                        val count    = log?.completedCount ?: 0
+                        val target   = sunnah.dailyTarget
+                        val unitStr  = sunnah.localizedUnit(langTag)
+                        "$count/$target $unitStr" to (log?.isCompleted == true)
+                    }
+                    else -> {
+                        val periodDays   = (period.days + 1).toInt()
+                        val total        = state.totalCountForPeriod(member.id, sunnah.name, fromDay, today)
+                        val maxTotal     = sunnah.dailyTarget * periodDays
+                        val unitStr      = sunnah.localizedUnit(langTag)
+                        "$total/$maxTotal $unitStr" to (total >= maxTotal)
+                    }
+                }
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(sunnah.rewardIcon, fontSize = 14.sp)
+                    Text(
+                        sunnah.localizedTitle(langTag),
+                        style    = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        progressLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isDone) PrayerGreenLight else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (isDone) FontWeight.Bold else FontWeight.Normal,
+                    )
+                    if (isDone) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint     = PrayerGreenLight,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── 3-Month heatmap ───────────────────────────────────────────────────────────
+
+@Composable
+private fun QuarterlyHeatmap(userId: String, state: PrayerUiState, today: Long) {
+    // 90 cells in a 15-column × 6-row grid
+    val rates = (0..89).reversed().map { daysAgo ->
+        state.dailyCompletionRate(userId, today - daysAgo)
+    }
+
+    val greenLight  = PrayerGreenLight
+    val goldColor   = PrayerGold
+    val surfacePale = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+
+    Card(
+        modifier  = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape     = RoundedCornerShape(14.dp),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(1.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                stringResource(R.string.prayer_last_90_days),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(90.dp)
+            ) {
+                val cols     = 15
+                val rows     = 6
+                val cellSize = size.width / cols
+                val radius   = cellSize * 0.33f
+
+                rates.forEachIndexed { index, rate ->
+                    val col   = index % cols
+                    val row   = index / cols
+                    val cx    = col * cellSize + cellSize / 2
+                    val cy    = row * (size.height / rows) + (size.height / rows) / 2
+                    val color = when {
+                        rate >= 1f -> goldColor
+                        rate > 0f  -> greenLight.copy(alpha = 0.3f + rate * 0.7f)
+                        else       -> surfacePale
+                    }
+                    drawCircle(color = color, radius = radius, center = Offset(cx, cy))
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LegendDot(color = surfacePale,                  label = stringResource(R.string.prayer_legend_none))
+                LegendDot(color = greenLight.copy(alpha = 0.6f), label = stringResource(R.string.prayer_legend_partial))
+                LegendDot(color = goldColor,                    label = stringResource(R.string.prayer_legend_complete))
+            }
+        }
     }
 }
 

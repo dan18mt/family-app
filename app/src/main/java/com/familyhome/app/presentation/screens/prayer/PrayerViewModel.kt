@@ -82,14 +82,40 @@ data class PrayerUiState(
     }
 
     /**
+     * Number of days within [fromEpochDay]..[toEpochDay] on which [userId] completed ALL
+     * active goals. Used to drive weekly / monthly / quarterly family progress cards.
+     */
+    fun completedDaysInPeriod(userId: String, fromEpochDay: Long, toEpochDay: Long): Int {
+        val active = activeGoalsFor(userId)
+        if (active.isEmpty()) return 0
+        var count = 0
+        for (day in fromEpochDay..toEpochDay) {
+            val allDone = active.all { goal ->
+                monthLogs.any { it.sunnahKey == goal.sunnahKey && it.userId == userId && it.epochDay == day && it.isCompleted }
+            }
+            if (allDone) count++
+        }
+        return count
+    }
+
+    /**
+     * Total accumulated count for [userId] / [sunnahKey] over [fromEpochDay]..[toEpochDay].
+     * Shows "6/84 rakaat this week" for SUNNAH_RAWATIB (target=12, 7 days → max 84).
+     */
+    fun totalCountForPeriod(userId: String, sunnahKey: String, fromEpochDay: Long, toEpochDay: Long): Int =
+        monthLogs
+            .filter { it.userId == userId && it.sunnahKey == sunnahKey && it.epochDay in fromEpochDay..toEpochDay }
+            .sumOf { it.completedCount }
+
+    /**
      * Current streak (consecutive completed days up to today) for [userId] / [sunnahKey].
-     * Checks up to 30 days back (month window).
+     * Checks up to 90 days back.
      */
     fun streakFor(sunnahKey: String, userId: String): Int {
         val today = System.currentTimeMillis() / DAY_MS
         var streak = 0
         var day = today
-        while (day >= today - 29) {
+        while (day >= today - 89) {
             val done = monthLogs.any { it.sunnahKey == sunnahKey && it.userId == userId && it.epochDay == day && it.isCompleted }
             if (done) { streak++; day-- } else break
         }
@@ -97,7 +123,7 @@ data class PrayerUiState(
     }
 
     companion object {
-        private const val DAY_MS = 24 * 60 * 60 * 1000L
+        const val DAY_MS = 24 * 60 * 60 * 1000L
     }
 }
 
@@ -136,10 +162,9 @@ class PrayerViewModel @Inject constructor(
                 _state.update { it.copy(todayLogs = logs) }
             }
         }
-        // 30 days covers weekly chart + monthly heatmap + streak calculations
+        // 90 days covers weekly chart, monthly heatmap, 3-month overview, and streak calculations
         viewModelScope.launch {
-            val monthAgo = todayEpochDay() - 29L
-            prayerRepository.getLogsSince(monthAgo).collect { logs ->
+            prayerRepository.getLogsSince(todayEpochDay() - 89L).collect { logs ->
                 _state.update { it.copy(monthLogs = logs) }
             }
         }
@@ -155,10 +180,11 @@ class PrayerViewModel @Inject constructor(
 
     /** Increment today's completion count for the current user (capped at dailyTarget). */
     fun logPrayer(sunnahKey: String) {
-        val user   = _state.value.currentUser ?: return
-        val sunnah = SunnahGoal.entries.firstOrNull { it.name == sunnahKey } ?: return
-        val today  = todayEpochDay()
+        val user     = _state.value.currentUser ?: return
+        val sunnah   = SunnahGoal.entries.firstOrNull { it.name == sunnahKey } ?: return
+        val today    = todayEpochDay()
         val existing = _state.value.todayLogFor(sunnahKey, user.id)
+        val newCount = ((existing?.completedCount ?: 0) + 1).coerceAtMost(sunnah.dailyTarget)
         viewModelScope.launch {
             prayerRepository.upsertLog(
                 PrayerLog(
@@ -166,10 +192,30 @@ class PrayerViewModel @Inject constructor(
                     userId         = user.id,
                     sunnahKey      = sunnahKey,
                     epochDay       = today,
-                    completedCount = ((existing?.completedCount ?: 0) + 1).coerceAtMost(sunnah.dailyTarget),
+                    completedCount = newCount,
                     loggedAt       = System.currentTimeMillis(),
                 )
             )
+            // Goal fully completed → dismiss any active notification and stop today's
+            // alarm cycle. The alarm is rescheduled for tomorrow automatically.
+            if (newCount >= sunnah.dailyTarget) {
+                val hasReminder = _state.value.goalSettings
+                    .firstOrNull { it.sunnahKey == sunnahKey }?.reminderEnabled == true
+                if (hasReminder && sunnah.reminderHour != null) {
+                    reminderScheduler.dismissNotification(sunnahKey)
+                    reminderScheduler.cancel(sunnahKey)
+                    // Restart daily cycle from tomorrow's window start
+                    reminderScheduler.schedule(
+                        sunnahKey         = sunnahKey,
+                        hour              = sunnah.reminderHour,
+                        minute            = sunnah.reminderMinute ?: 0,
+                        windowStartHour   = sunnah.reminderHour,
+                        windowStartMinute = sunnah.reminderMinute ?: 0,
+                        windowEndHour     = sunnah.reminderEndHour ?: -1,
+                        windowEndMinute   = sunnah.reminderEndMinute ?: 0,
+                    )
+                }
+            }
         }
     }
 
@@ -234,28 +280,36 @@ class PrayerViewModel @Inject constructor(
 
     /**
      * Toggle the daily reminder for a goal. Only has effect if the sunnah has a [SunnahGoal.reminderHour].
+     *
+     * Uses an optimistic state update so the button responds immediately without
+     * waiting for the DB round-trip — prevents the need for multiple taps.
      */
     fun toggleReminder(setting: PrayerGoalSetting) {
-        val sunnah = setting.sunnah ?: return
+        val sunnah     = setting.sunnah ?: return
         val newEnabled = !setting.reminderEnabled
+        // Optimistic UI update: reflect the new state before the DB write completes
+        _state.update { s ->
+            s.copy(goalSettings = s.goalSettings.map { g ->
+                if (g.id == setting.id) g.copy(reminderEnabled = newEnabled) else g
+            })
+        }
         viewModelScope.launch {
             prayerRepository.updateGoalSetting(setting.copy(reminderEnabled = newEnabled))
-        }
-        // Schedule or cancel the alarm
-        val startHour   = sunnah.reminderHour ?: return
-        val startMinute = sunnah.reminderMinute ?: 0
-        if (newEnabled) {
-            reminderScheduler.schedule(
-                sunnahKey        = setting.sunnahKey,
-                hour             = startHour,
-                minute           = startMinute,
-                windowStartHour  = startHour,
-                windowStartMinute = startMinute,
-                windowEndHour    = sunnah.reminderEndHour ?: -1,
-                windowEndMinute  = sunnah.reminderEndMinute ?: 0,
-            )
-        } else {
-            reminderScheduler.cancel(setting.sunnahKey)
+            val startHour   = sunnah.reminderHour ?: return@launch
+            val startMinute = sunnah.reminderMinute ?: 0
+            if (newEnabled) {
+                reminderScheduler.schedule(
+                    sunnahKey         = setting.sunnahKey,
+                    hour              = startHour,
+                    minute            = startMinute,
+                    windowStartHour   = startHour,
+                    windowStartMinute = startMinute,
+                    windowEndHour     = sunnah.reminderEndHour ?: -1,
+                    windowEndMinute   = sunnah.reminderEndMinute ?: 0,
+                )
+            } else {
+                reminderScheduler.cancel(setting.sunnahKey)
+            }
         }
     }
 

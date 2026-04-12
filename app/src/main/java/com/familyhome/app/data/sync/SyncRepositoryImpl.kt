@@ -7,6 +7,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.familyhome.app.data.mapper.*
 import com.familyhome.app.data.notification.AlarmScheduler
 import com.familyhome.app.data.notification.LowStockNotifier
+import com.familyhome.app.data.notification.PrayerReminderScheduler
+import com.familyhome.app.domain.model.SunnahGoal
 import com.familyhome.app.data.onboarding.NsdHelper
 import com.familyhome.app.domain.model.CustomExpenseCategory
 import com.familyhome.app.domain.model.CustomExpenseCategoryDto
@@ -40,6 +42,7 @@ class SyncRepositoryImpl @Inject constructor(
     private val customExpenseCategoryRepository: CustomExpenseCategoryRepository,
     private val prayerRepository: PrayerRepository,
     private val alarmScheduler: AlarmScheduler,
+    private val prayerReminderScheduler: PrayerReminderScheduler,
     private val sessionRepository: SessionRepository,
     private val lowStockNotifier: LowStockNotifier,
     private val presenceTracker: MemberPresenceTracker,
@@ -138,6 +141,7 @@ class SyncRepositoryImpl @Inject constructor(
             choreAssignments      = choreRepository.getAllAssignments().first().map { it.toAssignmentDto() },
             expenses              = expenseRepository.getAllExpenses().first().map { it.toDto() },
             budgets               = budgetRepository.getAllBudgets().first().map { it.toDto() },
+            deletedBudgetIds      = deletionTracker.getDeletedBudgetIds().toList().ifEmpty { null },
             customStockCategories = customStockCategoryRepository.getAllCategories().first()
                 .map { CustomStockCategoryDto(it.id, it.name, it.iconName) },
             customExpenseCategories = customExpenseCategoryRepository.getAllCategories().first()
@@ -177,7 +181,18 @@ class SyncRepositoryImpl @Inject constructor(
         payload.recurringTasks?.let        { choreRepository.upsertAllRecurring(it.map { dto -> dto.toDomain() }) }
         payload.choreAssignments?.let      { choreRepository.upsertAllAssignments(it.map { dto -> dto.toAssignmentDomain() }) }
         payload.expenses?.let              { expenseRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
-        payload.budgets?.let               { budgetRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        // Apply budget deletions from leader before upserting
+        payload.deletedBudgetIds?.let { ids ->
+            ids.forEach { id ->
+                budgetRepository.deleteBudget(id)
+                deletionTracker.recordBudgetDeletion(id)
+            }
+        }
+        payload.budgets?.let { dtos ->
+            val deletedBudgetIds = deletionTracker.getDeletedBudgetIds()
+            val toUpsert = dtos.filter { it.id !in deletedBudgetIds }
+            if (toUpsert.isNotEmpty()) budgetRepository.upsertAll(toUpsert.map { it.toDomain() })
+        }
         payload.customStockCategories?.let {
             customStockCategoryRepository.upsertAll(
                 it.map { dto -> CustomStockCategory(dto.id, dto.name, dto.iconName) }
@@ -219,6 +234,32 @@ class SyncRepositoryImpl @Inject constructor(
             prayerRepository.upsertAllLogs(
                 dtos.map { dto -> com.familyhome.app.domain.model.PrayerLog(dto.id, dto.userId, dto.sunnahKey, dto.epochDay, dto.completedCount, dto.loggedAt) }
             )
+        }
+
+        // Schedule or cancel prayer alarms on this device based on received goal settings.
+        // This ensures reminders work for ALL assigned family members, not just the leader.
+        val currentUserId = sessionRepository.getCurrentUserId()
+        if (currentUserId != null) {
+            payload.prayerGoalSettings?.forEach { dto ->
+                val sunnah    = SunnahGoal.entries.firstOrNull { it.name == dto.sunnahKey } ?: return@forEach
+                val startHour = sunnah.reminderHour ?: return@forEach // no fixed window → no alarm
+                val startMin  = sunnah.reminderMinute ?: 0
+                val assignedIds = dto.assignedTo?.split(",")?.filter { it.isNotBlank() }
+                val isAssignedToMe = assignedIds == null || currentUserId in assignedIds
+                if (dto.reminderEnabled && dto.isEnabled && isAssignedToMe) {
+                    prayerReminderScheduler.schedule(
+                        sunnahKey         = dto.sunnahKey,
+                        hour              = startHour,
+                        minute            = startMin,
+                        windowStartHour   = startHour,
+                        windowStartMinute = startMin,
+                        windowEndHour     = sunnah.reminderEndHour ?: -1,
+                        windowEndMinute   = sunnah.reminderEndMinute ?: 0,
+                    )
+                } else {
+                    prayerReminderScheduler.cancel(dto.sunnahKey)
+                }
+            }
         }
 
         // 3. Update local presence tracker from leader's presence map (enables all-device status)

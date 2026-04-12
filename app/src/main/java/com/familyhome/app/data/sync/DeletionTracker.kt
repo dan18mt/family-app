@@ -30,9 +30,11 @@ class DeletionTracker @Inject constructor(
 
     private val deletedUserIdsKey        = stringSetPreferencesKey("deleted_user_ids")
     private val deletedPrayerGoalIdsKey  = stringSetPreferencesKey("deleted_prayer_goal_ids")
+    private val deletedBudgetIdsKey      = stringSetPreferencesKey("deleted_budget_ids")
 
     private val _deletedUserIds       = MutableStateFlow<Set<String>>(emptySet())
     private val _deletedPrayerGoalIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _deletedBudgetIds     = MutableStateFlow<Set<String>>(emptySet())
 
     val deletedUserIds: StateFlow<Set<String>> = _deletedUserIds.asStateFlow()
 
@@ -41,6 +43,7 @@ class DeletionTracker @Inject constructor(
             val prefs = dataStore.data.first()
             _deletedUserIds.value       = prefs[deletedUserIdsKey]       ?: emptySet()
             _deletedPrayerGoalIds.value = prefs[deletedPrayerGoalIdsKey] ?: emptySet()
+            _deletedBudgetIds.value     = prefs[deletedBudgetIdsKey]     ?: emptySet()
         }
     }
 
@@ -69,4 +72,17 @@ class DeletionTracker @Inject constructor(
     fun getDeletedPrayerGoalIds(): Set<String> = _deletedPrayerGoalIds.value
 
     fun isPrayerGoalDeleted(id: String): Boolean = _deletedPrayerGoalIds.value.contains(id)
+
+    // ── Budgets ──────────────────────────────────────────────────────────────
+
+    suspend fun recordBudgetDeletion(id: String) {
+        _deletedBudgetIds.value = _deletedBudgetIds.value + id
+        dataStore.edit { prefs ->
+            prefs[deletedBudgetIdsKey] = (prefs[deletedBudgetIdsKey] ?: emptySet()) + id
+        }
+    }
+
+    fun getDeletedBudgetIds(): Set<String> = _deletedBudgetIds.value
+
+    fun isBudgetDeleted(id: String): Boolean = _deletedBudgetIds.value.contains(id)
 }

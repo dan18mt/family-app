@@ -92,6 +92,15 @@ class PrayerReminderScheduler @Inject constructor(
         }
     }
 
+    /**
+     * Dismiss any currently visible OS notification for [sunnahKey].
+     * Called when the user completes the goal so the alert clears immediately.
+     */
+    fun dismissNotification(sunnahKey: String) {
+        val nm = context.getSystemService(android.app.NotificationManager::class.java)
+        nm.cancel(sunnahKey.hashCode() and 0x7FFFFFFF)
+    }
+
     /** Cancel the daily reminder for [sunnahKey]. */
     fun cancel(sunnahKey: String) {
         val intent = Intent(context, PrayerAlarmReceiver::class.java)

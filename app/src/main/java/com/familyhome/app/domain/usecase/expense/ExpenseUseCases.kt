@@ -1,5 +1,6 @@
 package com.familyhome.app.domain.usecase.expense
 
+import com.familyhome.app.data.sync.DeletionTracker
 import com.familyhome.app.domain.model.Budget
 import com.familyhome.app.domain.model.BudgetPeriod
 import com.familyhome.app.domain.model.Expense
@@ -200,12 +201,14 @@ class GetAllBudgetsUseCase @Inject constructor(
 
 class DeleteBudgetUseCase @Inject constructor(
     private val budgetRepository: BudgetRepository,
+    private val deletionTracker: DeletionTracker,
 ) {
     suspend operator fun invoke(actor: User, budgetId: String): Result<Unit> {
         if (!PermissionManager.canSetBudget(actor)) {
             return Result.failure(IllegalStateException("Only Father can manage budgets."))
         }
         budgetRepository.deleteBudget(budgetId)
+        deletionTracker.recordBudgetDeletion(budgetId)
         return Result.success(Unit)
     }
 }

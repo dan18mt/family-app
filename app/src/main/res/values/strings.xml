@@ -85,13 +85,24 @@
 
     <!-- Prayer screen — stats &amp; charts -->
     <string name="prayer_family_today">Family Today</string>
+    <string name="prayer_family_progress">Family Progress</string>
     <string name="prayer_my_weekly">My Weekly Progress</string>
     <string name="prayer_my_monthly">Monthly Overview</string>
+    <string name="prayer_my_quarterly">3-Month Overview</string>
     <string name="prayer_last_30_days">Last 30 days</string>
+    <string name="prayer_last_90_days">Last 90 days</string>
     <string name="prayer_me">Me</string>
     <string name="prayer_legend_none">None</string>
     <string name="prayer_legend_partial">Partial</string>
     <string name="prayer_legend_complete">Complete</string>
+    <!-- Period filter chips -->
+    <string name="prayer_period_today">Today</string>
+    <string name="prayer_period_week">This Week</string>
+    <string name="prayer_period_month">This Month</string>
+    <string name="prayer_period_3months">3 Months</string>
+    <!-- Per-goal breakdown -->
+    <string name="prayer_days_completed">days completed</string>
+    <string name="prayer_goal_details">Goal Details</string>
 
     <!-- Prayer screen — achievements -->
     <string name="prayer_achievements_today">Achievements Today</string>
