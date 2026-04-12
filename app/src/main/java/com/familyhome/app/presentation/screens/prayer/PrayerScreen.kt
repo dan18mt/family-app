@@ -46,6 +46,14 @@ import com.familyhome.app.domain.model.SunnahGoal
 import com.familyhome.app.domain.model.User
 import com.familyhome.app.presentation.components.SectionHeader
 import com.familyhome.app.presentation.navigation.Screen
+import androidx.compose.ui.graphics.toArgb
+import com.patrykandpatrick.vico.compose.axis.horizontal.rememberBottomAxis
+import com.patrykandpatrick.vico.compose.axis.vertical.rememberStartAxis
+import com.patrykandpatrick.vico.compose.chart.Chart
+import com.patrykandpatrick.vico.compose.chart.line.lineChart
+import com.patrykandpatrick.vico.core.chart.line.LineChart
+import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
+import com.patrykandpatrick.vico.core.entry.FloatEntry
 import java.util.Calendar
 
 // ── Color palette ─────────────────────────────────────────────────────────────
@@ -53,6 +61,18 @@ private val PrayerGreen      = Color(0xFF1B4332)
 private val PrayerGreenLight = Color(0xFF2D6A4F)
 private val PrayerGold       = Color(0xFFD4A017)
 private val PrayerGoldLight  = Color(0xFFF5C842)
+
+// ── Per-member line colors for the family trend chart ─────────────────────────
+private val MemberLineColors = listOf(
+    Color(0xFF2D6A4F), // green
+    Color(0xFF1565C0), // blue
+    Color(0xFFD4A017), // gold
+    Color(0xFFAD1457), // pink
+    Color(0xFF6A1B9A), // purple
+    Color(0xFFE65100), // deep orange
+    Color(0xFF00838F), // teal
+    Color(0xFF558B2F), // lime green
+)
 
 // ── Period selector ───────────────────────────────────────────────────────────
 private enum class ProgressPeriod(val labelRes: Int, val days: Long) {
@@ -749,6 +769,152 @@ private fun AllDoneAchievements(state: PrayerUiState, userId: String) {
     }
 }
 
+// ── Family Progress Line Chart ────────────────────────────────────────────────
+
+@Composable
+private fun FamilyProgressLineChart(
+    state: PrayerUiState,
+    period: ProgressPeriod,
+    today: Long,
+) {
+    if (state.allUsers.isEmpty()) return
+
+    // ── Build per-member series data ──────────────────────────────────────────
+    data class SeriesResult(
+        val series: List<List<FloatEntry>>,
+        val xLabels: List<String>,
+    )
+
+    val result = remember(state.monthLogs, state.allUsers, period, today) {
+        when (period) {
+            ProgressPeriod.WEEK -> {
+                val series = state.allUsers.map { member ->
+                    (0..6).map { i ->
+                        FloatEntry(i.toFloat(), state.dailyCompletionRate(member.id, today - 6 + i) * 100f)
+                    }
+                }
+                val labels = (0..6).map { i ->
+                    val cal = Calendar.getInstance()
+                    cal.timeInMillis = (today - 6 + i) * PrayerUiState.DAY_MS
+                    listOf("M", "T", "W", "T", "F", "S", "S")[(cal.get(Calendar.DAY_OF_WEEK) - 2 + 7) % 7]
+                }
+                SeriesResult(series, labels)
+            }
+            ProgressPeriod.MONTH -> {
+                val series = state.allUsers.map { member ->
+                    (0..29).map { i ->
+                        FloatEntry(i.toFloat(), state.dailyCompletionRate(member.id, today - 29 + i) * 100f)
+                    }
+                }
+                // Label every 5th day to avoid crowding
+                val labels = (0..29).map { i ->
+                    if (i % 5 == 0) {
+                        val cal = Calendar.getInstance()
+                        cal.timeInMillis = (today - 29 + i) * PrayerUiState.DAY_MS
+                        "${cal.get(Calendar.DAY_OF_MONTH)}/${cal.get(Calendar.MONTH) + 1}"
+                    } else ""
+                }
+                SeriesResult(series, labels)
+            }
+            ProgressPeriod.THREE_MONTHS -> {
+                // Aggregate into 13 weekly averages to keep the chart readable
+                val weeks = 13
+                val series = state.allUsers.map { member ->
+                    (0 until weeks).map { w ->
+                        val weekStart = today - (weeks - w) * 7
+                        val avg = (0..6).map { d ->
+                            state.dailyCompletionRate(member.id, weekStart + d)
+                        }.average().toFloat() * 100f
+                        FloatEntry(w.toFloat(), avg)
+                    }
+                }
+                val labels = (0 until weeks).map { w -> "W${w + 1}" }
+                SeriesResult(series, labels)
+            }
+            else -> SeriesResult(emptyList(), emptyList())
+        }
+    }
+
+    if (result.series.isEmpty()) return
+
+    // ── Build Vico model producer ─────────────────────────────────────────────
+    val modelProducer = remember { ChartEntryModelProducer() }
+    LaunchedEffect(result) {
+        modelProducer.setEntries(result.series)
+    }
+
+    // ── Line specs — one per family member ───────────────────────────────────
+    val lines = remember(state.allUsers.size) {
+        state.allUsers.mapIndexed { i, _ ->
+            LineChart.LineSpec(
+                lineColor        = MemberLineColors[i % MemberLineColors.size].toArgb(),
+                lineThicknessDp  = 2f,
+            )
+        }
+    }
+
+    // ── UI ───────────────────────────────────────────────────────────────────
+    val xLabels = result.xLabels
+    Card(
+        modifier  = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape     = RoundedCornerShape(14.dp),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(1.dp),
+    ) {
+        Column(
+            modifier            = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                stringResource(R.string.prayer_family_trend_detail),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Chart(
+                chart = lineChart(lines = lines),
+                chartModelProducer = modelProducer,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp),
+                startAxis = rememberStartAxis(
+                    valueFormatter = { value, _ -> "${value.toInt()}%" },
+                ),
+                bottomAxis = rememberBottomAxis(
+                    valueFormatter = { value, _ -> xLabels.getOrElse(value.toInt()) { "" } },
+                ),
+            )
+
+            // ── Legend ────────────────────────────────────────────────────
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                state.allUsers.forEachIndexed { i, member ->
+                    Row(
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(MemberLineColors[i % MemberLineColors.size]),
+                        )
+                        Text(
+                            member.name.split(" ").first(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ── Family Stats Tab ──────────────────────────────────────────────────────────
 
 @Composable
@@ -830,6 +996,18 @@ private fun FamilyStatsTab(
                     fromDay  = fromDay,
                     period   = selectedPeriod,
                     langTag  = langTag,
+                )
+            }
+        }
+
+        // ── Family Progress Trend (line chart, hidden for TODAY) ──────────
+        if (selectedPeriod != ProgressPeriod.TODAY) {
+            item { SectionHeader(stringResource(R.string.prayer_family_trend)) }
+            item {
+                FamilyProgressLineChart(
+                    state  = state,
+                    period = selectedPeriod,
+                    today  = today,
                 )
             }
         }

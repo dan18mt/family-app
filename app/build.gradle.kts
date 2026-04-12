@@ -121,6 +121,9 @@ dependencies {
     // ---------- Coil ----------
     implementation(libs.coil.compose)
 
+    // ---------- Vico (charts) ----------
+    implementation(libs.vico.compose.m3)
+
     // ---------- Tests ----------
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

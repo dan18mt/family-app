@@ -17,6 +17,7 @@ okhttp                      = "4.12.0"
 kotlinxSerializationJson    = "1.7.3"
 kotlinxCoroutines           = "1.8.1"
 coil                        = "2.7.0"
+vico                        = "1.15.0"
 junit                       = "4.13.2"
 junitExt                    = "1.2.1"
 espresso                    = "3.6.1"
@@ -82,6 +83,9 @@ kotlinx-coroutines-android          = { group = "org.jetbrains.kotlinx", name = 
 
 # Coil
 coil-compose                        = { group = "io.coil-kt",         name = "coil-compose",                   version.ref = "coil" }
+
+# Vico (Compose-native charts)
+vico-compose-m3                     = { group = "com.patrykandpatrick.vico", name = "compose-m3",              version.ref = "vico" }
 
 # Tests
 junit                               = { group = "junit",              name = "junit",                          version.ref = "junit" }

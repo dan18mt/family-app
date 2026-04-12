@@ -86,6 +86,8 @@
     <!-- Prayer screen — stats &amp; charts -->
     <string name="prayer_family_today">Family Today</string>
     <string name="prayer_family_progress">Family Progress</string>
+    <string name="prayer_family_trend">Family Progress Trend</string>
+    <string name="prayer_family_trend_detail">Completion rate over time (%)</string>
     <string name="prayer_my_weekly">My Weekly Progress</string>
     <string name="prayer_my_monthly">Monthly Overview</string>
     <string name="prayer_my_quarterly">3-Month Overview</string>

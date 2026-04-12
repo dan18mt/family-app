@@ -76,6 +76,8 @@
     <string name="prayer_active_goals">Target Aktif</string>
     <string name="prayer_no_goals_manage">Belum ada target. Ketuk + untuk menambahkan target sunnah untuk keluarga.</string>
     <string name="prayer_today_goals">Target Hari Ini</string>
+    <string name="prayer_family_trend">Tren Kemajuan Keluarga</string>
+    <string name="prayer_family_trend_detail">Tingkat penyelesaian ibadah (%)</string>
 
     <!-- Expenses screen -->
     <string name="expenses_this_month">Bulan ini</string>
