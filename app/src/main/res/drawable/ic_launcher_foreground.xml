@@ -4,10 +4,23 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- House silhouette centred in the safe zone (72dp inner) -->
+
+    <!-- House body: roof peak → right eave → right wall → right base →
+         door right → door top-right → door top-left → door left → left base →
+         left wall → left eave → back to peak -->
     <path
         android:fillColor="#FFFFFF"
         android:pathData="
-          M54,22 L20,48 L20,86 L44,86 L44,64 L64,64 L64,86 L88,86 L88,48 Z
-          M54,30 L82,52 L82,80 L70,80 L70,58 L38,58 L38,80 L26,80 L26,52 Z" />
+          M54,20 L96,54 L86,54 L86,88 L64,88 L64,70 L44,70 L44,88 L22,88 L22,54 L12,54 Z" />
+
+    <!-- Crescent moon inside the house body (above the door) -->
+    <!-- Outer circle: center (54,61), r=9 -->
+    <!-- Inner circle: center (58,61), r=7.2  — shifted right to carve the crescent -->
+    <!-- Intersection x=62.1, y=61±5.4 → (62.1,55.6) and (62.1,66.4) -->
+    <path
+        android:fillColor="#004D40"
+        android:pathData="
+          M62.1,55.6
+          A9,9 0 1,0 62.1,66.4
+          A7.2,7.2 0 0,0 62.1,55.6 Z" />
 </vector>
