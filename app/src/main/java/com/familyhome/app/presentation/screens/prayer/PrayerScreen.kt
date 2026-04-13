@@ -40,6 +40,10 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.familyhome.app.R
+import com.familyhome.app.domain.helper.HijriCalendarHelper
+import com.familyhome.app.domain.model.IslamicCalendarSunnah
+import com.familyhome.app.domain.model.IslamicEventCategory
+import com.familyhome.app.domain.model.IslamicEventStatus
 import com.familyhome.app.domain.model.PrayerGoalSetting
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.SunnahGoal
@@ -61,6 +65,10 @@ private val PrayerGreen      = Color(0xFF1B4332)
 private val PrayerGreenLight = Color(0xFF2D6A4F)
 private val PrayerGold       = Color(0xFFD4A017)
 private val PrayerGoldLight  = Color(0xFFF5C842)
+// Hijri calendar accent — deep amber/maroon used for Islamic calendar events
+private val HijriAccent      = Color(0xFF7B2D00)
+private val HijriAccentLight = Color(0xFFBF4F00)
+private val HijriGold        = Color(0xFFC9840A)
 
 // ── Per-member line colors for the family trend chart ─────────────────────────
 private val MemberLineColors = listOf(
@@ -218,27 +226,54 @@ private fun TodayTab(
     currentUser: User?,
     viewModel: PrayerViewModel,
 ) {
-    val userId = currentUser?.id ?: return
-    val activeGoals = state.activeGoalsFor(userId)
+    val userId        = currentUser?.id ?: return
+    val langTag       = LocalContext.current.resources.configuration.locales[0].language
+    val isFather      = currentUser?.role == Role.FATHER
+    val today         = remember { System.currentTimeMillis() / PrayerUiState.DAY_MS }
 
-    if (activeGoals.isEmpty()) {
-        EmptyGoalsPlaceholder(isFather = currentUser.role == Role.FATHER)
+    // Daily sunnah goals (excludes Islamic calendar goals during off-period)
+    val activeGoals   = state.activeGoalsFor(userId).filter { !it.isIslamicCalendarEvent }
+
+    // Islamic calendar events that are active right now
+    val activeEvents  = state.islamicEvents.filter { it.status == IslamicEventStatus.ACTIVE }
+    val upcomingEvents = state.islamicEvents.filter {
+        it.status == IslamicEventStatus.UPCOMING && it.daysUntilStart <= 7
+    }
+
+    // If no daily goals AND no Islamic events, show the placeholder
+    if (activeGoals.isEmpty() && activeEvents.isEmpty() && upcomingEvents.isEmpty()) {
+        EmptyGoalsPlaceholder(isFather = isFather)
         return
     }
 
     val completedCount = state.completedTodayCount(userId)
     val totalCount     = activeGoals.size
-    val allDone        = completedCount == totalCount
-    val today          = remember { System.currentTimeMillis() / PrayerUiState.DAY_MS }
+    val allDone        = totalCount > 0 && completedCount == totalCount
 
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { DailySummaryCard(completed = completedCount, total = totalCount) }
-        item { SectionHeader(stringResource(R.string.prayer_today_goals)) }
+        // Daily summary only when there are daily goals
+        if (totalCount > 0) {
+            item { DailySummaryCard(completed = completedCount, total = totalCount) }
+        }
+
+        // ── Islamic Calendar Banner ─────────────────────────────────────────
+        if (activeEvents.isNotEmpty() || upcomingEvents.isNotEmpty()) {
+            item {
+                IslamicCalendarBanner(
+                    langTag       = langTag,
+                    activeCount   = activeEvents.size,
+                    upcomingCount = upcomingEvents.size,
+                )
+            }
+        }
+
+        if (activeGoals.isNotEmpty()) {
+            item { SectionHeader(stringResource(R.string.prayer_today_goals)) }
+        }
         items(activeGoals, key = { it.id }) { goal ->
-            val langTag = LocalContext.current.resources.configuration.locales[0].language
-            val log     = state.todayLogFor(goal.sunnahKey, userId)
-            val sunnah  = goal.sunnah ?: return@items
-            val streak  = state.streakFor(goal.sunnahKey, userId)
+            val log    = state.todayLogFor(goal.sunnahKey, userId)
+            val sunnah = goal.sunnah ?: return@items
+            val streak = state.streakFor(goal.sunnahKey, userId)
             GoalProgressCard(
                 sunnah         = sunnah,
                 langTag        = langTag,
@@ -253,6 +288,45 @@ private fun TodayTab(
         // Achievement summary when all goals are done
         if (allDone) {
             item { AllDoneAchievements(state = state, userId = userId) }
+        }
+
+        // ── Islamic Calendar Events Section ─────────────────────────────────
+        if (activeEvents.isNotEmpty()) {
+            item {
+                SectionHeader(stringResource(R.string.prayer_islamic_calendar_section))
+            }
+            items(activeEvents, key = { "islamic_${it.sunnah.name}" }) { eventInfo ->
+                val myDays = state.islamicEventCompletedDays(
+                    sunnahKey      = eventInfo.sunnah.name,
+                    userId         = userId,
+                    startEpochDay  = eventInfo.periodStartEpochDay,
+                    endEpochDay    = eventInfo.periodEndEpochDay,
+                )
+                val todayLog = state.todayLogFor(eventInfo.sunnah.name, userId)
+                val isGoalSet = eventInfo.goalSetting != null &&
+                                eventInfo.goalSetting.isAssignedTo(userId)
+                IslamicEventCard(
+                    eventInfo     = eventInfo,
+                    langTag       = langTag,
+                    myCompletedDays = myDays,
+                    doneToday     = todayLog?.isCompleted == true,
+                    isGoalSet     = isGoalSet,
+                    isFather      = isFather,
+                    onLog         = { viewModel.logIslamicIbadah(eventInfo.sunnah.name) },
+                    onUndo        = { viewModel.undoIslamicIbadah(eventInfo.sunnah.name) },
+                    onAddGoal     = { viewModel.addIslamicGoal(eventInfo.sunnah, null) },
+                )
+            }
+        }
+
+        // Upcoming events teaser
+        if (upcomingEvents.isNotEmpty()) {
+            item {
+                SectionHeader(stringResource(R.string.prayer_islamic_upcoming))
+            }
+            items(upcomingEvents, key = { "upcoming_${it.sunnah.name}" }) { eventInfo ->
+                IslamicUpcomingCard(eventInfo = eventInfo, langTag = langTag)
+            }
         }
 
         // ── My History ────────────────────────────────────────────────────
@@ -1100,6 +1174,21 @@ private fun FamilyStatsTab(
             }
         }
 
+        // ── Islamic Calendar Family Progress ─────────────────────────────
+        val activeIslamicEvents = state.islamicEvents.filter { it.status == IslamicEventStatus.ACTIVE }
+        if (activeIslamicEvents.isNotEmpty()) {
+            item {
+                SectionHeader(stringResource(R.string.prayer_islamic_family_this_month))
+            }
+            items(activeIslamicEvents, key = { "family_islamic_${it.sunnah.name}" }) { eventInfo ->
+                IslamicFamilyEventRow(
+                    eventInfo = eventInfo,
+                    state     = state,
+                    langTag   = langTag,
+                )
+            }
+        }
+
         // ── Achievements ──────────────────────────────────────────────────
         val earnedRewards = state.activeGoalsFor(userId).mapNotNull { it.sunnah }.filter { sunnah ->
             state.todayLogFor(sunnah.name, userId)?.isCompleted == true
@@ -1108,6 +1197,119 @@ private fun FamilyStatsTab(
             item { SectionHeader(stringResource(R.string.prayer_achievements_today)) }
             items(earnedRewards) { sunnah ->
                 AchievementRow(sunnah = sunnah, langTag = langTag, state = state, userId = userId)
+            }
+        }
+    }
+}
+
+// ── Islamic Family Event Row ──────────────────────────────────────────────────
+
+@Composable
+private fun IslamicFamilyEventRow(
+    eventInfo: IslamicEventInfo,
+    state: PrayerUiState,
+    langTag: String,
+) {
+    val sunnah = eventInfo.sunnah
+    Card(
+        modifier  = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape     = RoundedCornerShape(12.dp),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(1.dp),
+    ) {
+        Column(
+            modifier            = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(sunnah.rewardIcon, fontSize = 20.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(sunnah.localizedTitle(langTag), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (langTag == "en") "${eventInfo.daysUntilEnd} day(s) left"
+                        else "${eventInfo.daysUntilEnd} hari tersisa",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (eventInfo.daysUntilEnd <= 3) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                // Goal badge
+                Box(
+                    modifier         = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(HijriAccent.copy(alpha = 0.10f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (langTag == "en") "Goal: ${sunnah.totalDaysGoal}d"
+                        else "Target: ${sunnah.totalDaysGoal}h",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = HijriAccentLight,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+
+            // Per-member progress rows
+            state.allUsers.forEach { member ->
+                val days    = state.islamicEventCompletedDays(
+                    sunnahKey     = sunnah.name,
+                    userId        = member.id,
+                    startEpochDay = eventInfo.periodStartEpochDay,
+                    endEpochDay   = eventInfo.periodEndEpochDay,
+                )
+                val progress = (days.toFloat() / sunnah.totalDaysGoal).coerceIn(0f, 1f)
+                val done     = days >= sunnah.totalDaysGoal
+
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier              = Modifier.fillMaxWidth(),
+                ) {
+                    // Avatar
+                    Box(
+                        modifier         = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(if (done) HijriGold else MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (done) {
+                            Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                        } else {
+                            Text(
+                                member.name.firstOrNull()?.uppercase() ?: "?",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                    Text(
+                        member.name.split(" ").first(),
+                        style    = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.width(72.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    LinearProgressIndicator(
+                        progress   = { progress },
+                        modifier   = Modifier.weight(1f).height(5.dp).clip(CircleShape),
+                        color      = if (done) HijriGold else HijriAccentLight,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    )
+                    Text(
+                        "$days/${sunnah.totalDaysGoal}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (done) HijriGold else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (done) FontWeight.Bold else FontWeight.Normal,
+                    )
+                }
             }
         }
     }
@@ -1545,14 +1747,20 @@ private fun ManageTab(
     state: PrayerUiState,
     viewModel: PrayerViewModel,
 ) {
-    var addMemberGoalId by remember { mutableStateOf<String?>(null) }
+    var addMemberGoalId        by remember { mutableStateOf<String?>(null) }
+    var showAddIslamicGoalDialog by remember { mutableStateOf(false) }
+
+    val dailyGoals   = state.goalSettings.filter { !it.isIslamicCalendarEvent }
+    val islamicGoals = state.goalSettings.filter { it.isIslamicCalendarEvent }
+    val langTag      = LocalContext.current.resources.configuration.locales[0].language
 
     LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
+        // ── Daily Sunnah Goals ────────────────────────────────────────────
         item { SectionHeader(stringResource(R.string.prayer_active_goals)) }
-        if (state.goalSettings.isEmpty()) {
+        if (dailyGoals.isEmpty()) {
             item {
                 Box(
-                    modifier         = Modifier.fillMaxWidth().padding(32.dp),
+                    modifier         = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -1563,27 +1771,96 @@ private fun ManageTab(
                 }
             }
         } else {
-            items(state.goalSettings, key = { it.id }) { setting ->
+            items(dailyGoals, key = { it.id }) { setting ->
                 ManageGoalItem(
-                    setting   = setting,
-                    allUsers  = state.allUsers,
-                    onToggle  = { viewModel.toggleGoal(setting) },
-                    onRemove  = { viewModel.removeGoal(setting) },
+                    setting          = setting,
+                    allUsers         = state.allUsers,
+                    onToggle         = { viewModel.toggleGoal(setting) },
+                    onRemove         = { viewModel.removeGoal(setting) },
                     onToggleReminder = { viewModel.toggleReminder(setting) },
-                    onAddMember = { addMemberGoalId = setting.id },
+                    onAddMember      = { addMemberGoalId = setting.id },
                 )
             }
         }
+
+        // ── Islamic Calendar Goals ────────────────────────────────────────
+        item {
+            Row(
+                modifier              = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    stringResource(R.string.prayer_islamic_calendar_goals_section),
+                    style      = MaterialTheme.typography.titleSmall,
+                    color      = HijriAccentLight,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                // Add Islamic goal button
+                val hasMoreToAdd = IslamicCalendarSunnah.entries.any { sunnah ->
+                    islamicGoals.none { it.sunnahKey == sunnah.name }
+                }
+                if (hasMoreToAdd) {
+                    OutlinedButton(
+                        onClick = { showAddIslamicGoalDialog = true },
+                        colors  = ButtonDefaults.outlinedButtonColors(contentColor = HijriAccentLight),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    ) {
+                        Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            stringResource(R.string.prayer_add_islamic_goal),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+        }
+
+        if (islamicGoals.isEmpty()) {
+            item {
+                ManageIslamicGoalsEmptyCard(
+                    onAdd = { showAddIslamicGoalDialog = true },
+                    langTag = langTag,
+                )
+            }
+        } else {
+            items(islamicGoals, key = { it.id }) { setting ->
+                ManageIslamicGoalItem(
+                    setting          = setting,
+                    allUsers         = state.allUsers,
+                    events           = state.islamicEvents,
+                    onToggle         = { viewModel.toggleGoal(setting) },
+                    onRemove         = { viewModel.removeGoal(setting) },
+                    onAddMember      = { addMemberGoalId = setting.id },
+                    langTag          = langTag,
+                )
+            }
+        }
+
+        // Hijri calendar overview — show all available sunnah not yet added
+        item { Spacer(Modifier.height(8.dp)) }
+        item {
+            IslamicCalendarOverview(
+                events    = state.islamicEvents,
+                addedKeys = state.goalSettings.map { it.sunnahKey }.toSet(),
+                langTag   = langTag,
+                onAdd     = { sunnah -> viewModel.addIslamicGoal(sunnah, null) },
+            )
+        }
     }
 
-    // Add-member dialog
+    // Add-member dialog (shared for both daily and Islamic goals)
     val targetGoalId = addMemberGoalId
     if (targetGoalId != null) {
         val setting = state.goalSettings.firstOrNull { it.id == targetGoalId }
         if (setting != null) {
-            AddMemberDialog(
+            AddMemberDialogUnified(
                 setting   = setting,
                 allUsers  = state.allUsers,
+                langTag   = LocalContext.current.resources.configuration.locales[0].language,
                 onAssign  = { userId ->
                     viewModel.addAssigneeToGoal(targetGoalId, userId)
                     addMemberGoalId = null
@@ -1591,6 +1868,21 @@ private fun ManageTab(
                 onDismiss = { addMemberGoalId = null },
             )
         }
+    }
+
+    // Add Islamic calendar goal dialog
+    if (showAddIslamicGoalDialog) {
+        AddIslamicGoalDialog(
+            existing  = state.goalSettings,
+            allUsers  = state.allUsers,
+            events    = state.islamicEvents,
+            langTag   = LocalContext.current.resources.configuration.locales[0].language,
+            onAdd     = { sunnah, assignedUserIds ->
+                viewModel.addIslamicGoal(sunnah, assignedUserIds)
+                showAddIslamicGoalDialog = false
+            },
+            onDismiss = { showAddIslamicGoalDialog = false },
+        )
     }
 }
 
@@ -1875,30 +2167,31 @@ private fun AddGoalDialog(
     )
 }
 
-// ── Add Member Dialog ─────────────────────────────────────────────────────────
+// ── Add Member Dialog (unified for daily + Islamic calendar goals) ────────────
 
 @Composable
-private fun AddMemberDialog(
+private fun AddMemberDialogUnified(
     setting: PrayerGoalSetting,
     allUsers: List<User>,
+    langTag: String,
     onAssign: (userId: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val langTag     = LocalContext.current.resources.configuration.locales[0].language
-    val sunnah      = setting.sunnah ?: return
-    val unassigned  = allUsers.filter { user ->
+    val titleText = setting.sunnah?.let { "${it.rewardIcon}  ${it.localizedTitle(langTag)}" }
+        ?: setting.islamicCalendarSunnah?.let { "${it.rewardIcon}  ${it.localizedTitle(langTag)}" }
+        ?: setting.sunnahKey
+
+    val unassigned = allUsers.filter { user ->
         setting.assignedUserIds != null && user.id !in setting.assignedUserIds
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title  = {
-            Text(stringResource(R.string.prayer_add_member_title))
-        },
+        title  = { Text(stringResource(R.string.prayer_add_member_title)) },
         text   = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    "${sunnah.rewardIcon}  ${sunnah.localizedTitle(langTag)}",
+                    titleText,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1929,7 +2222,7 @@ private fun AddMemberDialog(
                             ) {
                                 Text(
                                     user.name.firstOrNull()?.uppercase() ?: "?",
-                                    style  = MaterialTheme.typography.titleSmall,
+                                    style      = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                 )
                             }
@@ -1942,12 +2235,7 @@ private fun AddMemberDialog(
                                 )
                             }
                             Spacer(Modifier.weight(1f))
-                            Icon(
-                                Icons.Default.PersonAdd,
-                                null,
-                                tint     = PrayerGreenLight,
-                                modifier = Modifier.size(20.dp),
-                            )
+                            Icon(Icons.Default.PersonAdd, null, tint = PrayerGreenLight, modifier = Modifier.size(20.dp))
                         }
                         HorizontalDivider(thickness = 0.5.dp)
                     }
@@ -1955,6 +2243,807 @@ private fun AddMemberDialog(
             }
         },
         confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
+
+// ── Islamic Calendar Banner ───────────────────────────────────────────────────
+
+@Composable
+private fun IslamicCalendarBanner(
+    langTag: String,
+    activeCount: Int,
+    upcomingCount: Int,
+) {
+    val monthName = remember(langTag) { HijriCalendarHelper.currentMonthDisplayName(langTag) }
+    val subtitle = when {
+        activeCount > 0 && langTag == "en"   -> "$activeCount active sunnah this month"
+        activeCount > 0                       -> "$activeCount ibadah sunnah aktif bulan ini"
+        upcomingCount > 0 && langTag == "en"  -> "$upcomingCount sunnah starting soon"
+        else                                  -> if (langTag == "en") "Check upcoming sunnah" else "Lihat ibadah mendatang"
+    }
+
+    Card(
+        modifier  = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape     = RoundedCornerShape(12.dp),
+        colors    = CardDefaults.cardColors(containerColor = HijriAccent.copy(alpha = 0.10f)),
+        border    = androidx.compose.foundation.BorderStroke(1.dp, HijriAccentLight.copy(alpha = 0.35f)),
+    ) {
+        Row(
+            modifier              = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("🕌", fontSize = 22.sp)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    monthName,
+                    style      = MaterialTheme.typography.labelLarge,
+                    color      = HijriAccentLight,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+// ── Islamic Event Card (active period) ────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun IslamicEventCard(
+    eventInfo: IslamicEventInfo,
+    langTag: String,
+    myCompletedDays: Int,
+    doneToday: Boolean,
+    isGoalSet: Boolean,
+    isFather: Boolean,
+    onLog: () -> Unit,
+    onUndo: () -> Unit,
+    onAddGoal: () -> Unit,
+) {
+    val sunnah      = eventInfo.sunnah
+    val goal        = sunnah.totalDaysGoal
+    val progress    = (myCompletedDays.toFloat() / goal).coerceIn(0f, 1f)
+    val isComplete  = myCompletedDays >= goal
+
+    var showDetail  by remember { mutableStateOf(false) }
+
+    Card(
+        modifier  = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape     = RoundedCornerShape(14.dp),
+        colors    = CardDefaults.cardColors(
+            containerColor = if (isComplete) HijriAccent.copy(alpha = 0.10f)
+                             else MaterialTheme.colorScheme.surface,
+        ),
+        border    = if (isComplete)
+            androidx.compose.foundation.BorderStroke(1.dp, HijriGold.copy(alpha = 0.5f))
+        else null,
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+            // Header row
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // Icon
+                Box(
+                    modifier         = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            if (isComplete) HijriGold.copy(alpha = 0.20f)
+                            else HijriAccent.copy(alpha = 0.12f)
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(sunnah.rewardIcon, fontSize = 20.sp)
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        sunnah.localizedTitle(langTag),
+                        style      = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines   = 2,
+                        overflow   = TextOverflow.Ellipsis,
+                    )
+                    // Days remaining
+                    Text(
+                        if (langTag == "en")
+                            "${eventInfo.daysUntilEnd} day(s) left in this period"
+                        else
+                            "${eventInfo.daysUntilEnd} hari tersisa",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (eventInfo.daysUntilEnd <= 3) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                // Info button
+                IconButton(onClick = { showDetail = true }, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Default.MenuBook, null,
+                        tint     = HijriAccentLight.copy(alpha = 0.8f),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+
+            // Progress: X / Y days
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            if (langTag == "en") "$myCompletedDays / $goal days"
+                            else "$myCompletedDays / $goal hari",
+                            style      = MaterialTheme.typography.labelMedium,
+                            color      = if (isComplete) HijriGold else HijriAccentLight,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        if (isComplete) Text("✅", fontSize = 14.sp)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress   = { progress },
+                        modifier   = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
+                        color      = if (isComplete) HijriGold else HijriAccentLight,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    )
+                }
+
+                // Log / undo buttons
+                if (isGoalSet) {
+                    if (doneToday) {
+                        OutlinedIconButton(
+                            onClick  = onUndo,
+                            modifier = Modifier.size(36.dp),
+                            border   = ButtonDefaults.outlinedButtonBorder(),
+                        ) {
+                            Icon(Icons.Default.Remove, "Undo", modifier = Modifier.size(16.dp))
+                        }
+                    } else if (!isComplete) {
+                        IconButton(
+                            onClick  = onLog,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(HijriAccentLight),
+                        ) {
+                            Icon(Icons.Default.Add, "Log", tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+
+            // Reward banner
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(HijriGold.copy(alpha = 0.10f))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(sunnah.rewardIcon, fontSize = 14.sp)
+                Text(
+                    sunnah.localizedReward(langTag),
+                    style      = MaterialTheme.typography.labelSmall,
+                    color      = HijriGold,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            // "Add as family goal" — only for leader if goal not yet set
+            if (isFather && !isGoalSet) {
+                OutlinedButton(
+                    onClick   = onAddGoal,
+                    modifier  = Modifier.fillMaxWidth(),
+                    colors    = ButtonDefaults.outlinedButtonColors(contentColor = HijriAccentLight),
+                    contentPadding = PaddingValues(vertical = 6.dp),
+                ) {
+                    Icon(Icons.Default.GroupAdd, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        stringResource(R.string.prayer_add_islamic_family_goal),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+        }
+    }
+
+    // Detail bottom sheet
+    if (showDetail) {
+        IslamicEventDetailSheet(
+            sunnah    = sunnah,
+            langTag   = langTag,
+            onDismiss = { showDetail = false },
+        )
+    }
+}
+
+// ── Islamic Event Upcoming Card ───────────────────────────────────────────────
+
+@Composable
+private fun IslamicUpcomingCard(
+    eventInfo: IslamicEventInfo,
+    langTag: String,
+) {
+    val sunnah = eventInfo.sunnah
+    Card(
+        modifier  = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape     = RoundedCornerShape(12.dp),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+    ) {
+        Row(
+            modifier              = Modifier.padding(12.dp),
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(sunnah.rewardIcon, fontSize = 24.sp)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    sunnah.localizedTitle(langTag),
+                    style      = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    if (langTag == "en") "Starts in ${eventInfo.daysUntilStart} day(s)"
+                    else "Mulai ${eventInfo.daysUntilStart} hari lagi",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = HijriAccentLight,
+                )
+            }
+            // Goal target chips
+            Box(
+                modifier         = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(HijriAccent.copy(alpha = 0.10f))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    if (langTag == "en") "${sunnah.totalDaysGoal} day(s)"
+                    else "${sunnah.totalDaysGoal} hari",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = HijriAccentLight,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+// ── Islamic Event Detail Sheet ────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun IslamicEventDetailSheet(
+    sunnah: IslamicCalendarSunnah,
+    langTag: String,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor   = MaterialTheme.colorScheme.surface,
+        dragHandle       = { BottomSheetDefaults.DragHandle() },
+    ) {
+        Column(
+            modifier            = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            // Title
+            Text(
+                "${sunnah.rewardIcon}  ${sunnah.localizedTitle(langTag)}",
+                style      = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+
+            // Category badge
+            val catLabel = when (sunnah.category) {
+                IslamicEventCategory.FASTING -> if (langTag == "en") "Fasting" else "Puasa"
+                IslamicEventCategory.PRAYER  -> if (langTag == "en") "Night Prayer" else "Shalat Malam"
+                IslamicEventCategory.IBADAH  -> if (langTag == "en") "Ibadah" else "Ibadah"
+            }
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(HijriAccent.copy(alpha = 0.10f))
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+            ) {
+                Text("📅", fontSize = 12.sp)
+                Text(catLabel, style = MaterialTheme.typography.labelSmall, color = HijriAccentLight)
+            }
+
+            // Reward banner
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(HijriGold.copy(alpha = 0.12f))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(sunnah.rewardIcon, fontSize = 22.sp)
+                Column {
+                    Text(
+                        if (langTag == "en") "Reward" else "Pahala",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = HijriGold.copy(alpha = 0.7f),
+                    )
+                    Text(
+                        sunnah.localizedReward(langTag),
+                        style      = MaterialTheme.typography.bodyMedium,
+                        color      = HijriGold,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+
+            HorizontalDivider(thickness = 0.5.dp)
+
+            // Hadith
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    stringResource(R.string.prayer_hadith_label),
+                    style      = MaterialTheme.typography.labelMedium,
+                    color      = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "\"${sunnah.localizedHadith(langTag)}\"",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
+                )
+                Text(
+                    "— ${sunnah.localizedSource(langTag)}",
+                    style      = MaterialTheme.typography.labelMedium,
+                    color      = HijriAccentLight,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+
+            // Goal info
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    Icons.Default.TrackChanges, null,
+                    tint     = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+                Text(
+                    if (langTag == "en") "Goal: ${sunnah.totalDaysGoal} day(s) in this period"
+                    else "Target: ${sunnah.totalDaysGoal} hari dalam periode ini",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+// ── Manage Islamic Goal Item ──────────────────────────────────────────────────
+
+@Composable
+private fun ManageIslamicGoalItem(
+    setting: PrayerGoalSetting,
+    allUsers: List<User>,
+    events: List<IslamicEventInfo>,
+    onToggle: () -> Unit,
+    onRemove: () -> Unit,
+    onAddMember: () -> Unit,
+    langTag: String,
+) {
+    val sunnah         = setting.islamicCalendarSunnah ?: return
+    val eventInfo      = events.firstOrNull { it.sunnah.name == sunnah.name }
+    val isFullyAssigned = setting.isFullyAssigned(allUsers.map { it.id })
+    val allFamilyLabel  = stringResource(R.string.prayer_all_family)
+
+    val statusLabel = when (eventInfo?.status) {
+        IslamicEventStatus.ACTIVE   -> if (langTag == "en") "Active now" else "Aktif sekarang"
+        IslamicEventStatus.UPCOMING -> if (langTag == "en") "Starts in ${eventInfo.daysUntilStart}d" else "Mulai ${eventInfo.daysUntilStart} hari lagi"
+        IslamicEventStatus.PAST     -> if (langTag == "en") "Period ended" else "Periode selesai"
+        null                        -> ""
+    }
+
+    val assigneeLabel = when {
+        setting.assignedUserIds == null -> allFamilyLabel
+        setting.assignedUserIds.isEmpty() -> allFamilyLabel
+        else -> setting.assignedUserIds.mapNotNull { id ->
+            allUsers.firstOrNull { it.id == id }?.name
+        }.joinToString(", ").ifEmpty { allFamilyLabel }
+    }
+
+    Column {
+        ListItem(
+            headlineContent = {
+                Text(sunnah.localizedTitle(langTag), style = MaterialTheme.typography.bodyLarge)
+            },
+            supportingContent = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "${stringResource(R.string.prayer_assigned_to_label)} $assigneeLabel",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (statusLabel.isNotEmpty()) {
+                        Text(
+                            "📅 $statusLabel",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = when (eventInfo?.status) {
+                                IslamicEventStatus.ACTIVE   -> HijriAccentLight
+                                IslamicEventStatus.UPCOMING -> PrayerGreenLight
+                                else                         -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            },
+                        )
+                    }
+                }
+            },
+            leadingContent = {
+                Box(
+                    modifier         = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            if (setting.isEnabled) HijriAccent else MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(sunnah.rewardIcon, fontSize = 18.sp)
+                }
+            },
+            trailingContent = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(0.dp),
+                    verticalAlignment     = Alignment.CenterVertically,
+                ) {
+                    Switch(
+                        checked         = setting.isEnabled,
+                        onCheckedChange = { onToggle() },
+                        colors          = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = HijriAccentLight,
+                        ),
+                    )
+                    IconButton(onClick = onRemove) {
+                        Icon(Icons.Default.Delete, "Remove", tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+        )
+        if (!isFullyAssigned) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 8.dp),
+            ) {
+                OutlinedButton(
+                    onClick  = onAddMember,
+                    modifier = Modifier.weight(1f),
+                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = HijriAccentLight),
+                ) {
+                    Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(R.string.prayer_add_member), style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp)
+    }
+}
+
+// ── Islamic Goals Empty State ─────────────────────────────────────────────────
+
+@Composable
+private fun ManageIslamicGoalsEmptyCard(
+    onAdd: () -> Unit,
+    langTag: String,
+) {
+    Card(
+        modifier  = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape     = RoundedCornerShape(12.dp),
+        colors    = CardDefaults.cardColors(containerColor = HijriAccent.copy(alpha = 0.06f)),
+        border    = androidx.compose.foundation.BorderStroke(1.dp, HijriAccentLight.copy(alpha = 0.2f)),
+    ) {
+        Column(
+            modifier              = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment   = Alignment.CenterHorizontally,
+            verticalArrangement   = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("🗓️", fontSize = 32.sp)
+            Text(
+                if (langTag == "en") "No Islamic calendar goals set"
+                else "Belum ada target ibadah kalender Hijriyah",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                if (langTag == "en") "Add sunnah ibadah that are tied to specific Islamic months — Syawal fasting, Arafah fast, and more."
+                else "Tambahkan ibadah sunnah yang terkait dengan bulan Hijriyah tertentu — Puasa Syawal, Puasa Arafah, dan lainnya.",
+                style     = MaterialTheme.typography.bodySmall,
+                color     = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            OutlinedButton(
+                onClick = onAdd,
+                colors  = ButtonDefaults.outlinedButtonColors(contentColor = HijriAccentLight),
+            ) {
+                Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.prayer_add_islamic_goal))
+            }
+        }
+    }
+}
+
+// ── Islamic Calendar Year Overview ────────────────────────────────────────────
+// Shows all available sunnah for the year so the leader can add them as family goals.
+
+@Composable
+private fun IslamicCalendarOverview(
+    events: List<IslamicEventInfo>,
+    addedKeys: Set<String>,
+    langTag: String,
+    onAdd: (IslamicCalendarSunnah) -> Unit,
+) {
+    // Show all sunnah not yet added (upcoming or past, not yet goals)
+    val notAdded = IslamicCalendarSunnah.entries.filter { it.name !in addedKeys }
+    if (notAdded.isEmpty()) return
+
+    Column(
+        modifier            = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
+    ) {
+        Text(
+            if (langTag == "en") "Available This Year" else "Tersedia Tahun Ini",
+            style      = MaterialTheme.typography.labelMedium,
+            color      = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier   = Modifier.padding(bottom = 6.dp),
+        )
+        notAdded.forEach { sunnah ->
+            val event     = events.firstOrNull { it.sunnah.name == sunnah.name }
+            val monthName = sunnah.activeRanges.firstOrNull()?.hijriMonth?.let {
+                HijriCalendarHelper.monthDisplayName(it, langTag)
+            } ?: ""
+            val statusTag = when (event?.status) {
+                IslamicEventStatus.ACTIVE   -> if (langTag == "en") "Active" else "Aktif"
+                IslamicEventStatus.UPCOMING -> if (langTag == "en") "Upcoming" else "Mendatang"
+                IslamicEventStatus.PAST     -> if (langTag == "en") "Passed" else "Sudah lewat"
+                null                        -> monthName
+            }
+
+            Row(
+                modifier              = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(sunnah.rewardIcon, fontSize = 20.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(sunnah.localizedTitle(langTag), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        statusTag,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = when (event?.status) {
+                            IslamicEventStatus.ACTIVE   -> HijriAccentLight
+                            IslamicEventStatus.UPCOMING -> PrayerGreenLight
+                            else                         -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        },
+                    )
+                }
+                OutlinedButton(
+                    onClick   = { onAdd(sunnah) },
+                    colors    = ButtonDefaults.outlinedButtonColors(contentColor = HijriAccentLight),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        if (langTag == "en") "Add" else "Tambah",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+        }
+    }
+}
+
+// ── Add Islamic Goal Dialog ───────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddIslamicGoalDialog(
+    existing: List<PrayerGoalSetting>,
+    allUsers: List<User>,
+    events: List<IslamicEventInfo>,
+    langTag: String,
+    onAdd: (sunnah: IslamicCalendarSunnah, assignedUserIds: List<String>?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val existingKeys = existing.map { it.sunnahKey }.toSet()
+    val available    = IslamicCalendarSunnah.entries.filter { it.name !in existingKeys }
+
+    var selectedSunnah by remember { mutableStateOf<IslamicCalendarSunnah?>(null) }
+    var selectedUserId by remember { mutableStateOf<String?>(null) }
+    var sunnahExpanded by remember { mutableStateOf(false) }
+    var memberExpanded by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title  = { Text(stringResource(R.string.prayer_add_islamic_goal_title)) },
+        text   = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Sunnah picker
+                ExposedDropdownMenuBox(
+                    expanded         = sunnahExpanded,
+                    onExpandedChange = { sunnahExpanded = it },
+                ) {
+                    OutlinedTextField(
+                        value         = selectedSunnah?.localizedTitle(langTag)
+                            ?: if (langTag == "en") "Select sunnah event" else "Pilih ibadah sunnah",
+                        onValueChange = {},
+                        readOnly      = true,
+                        label         = { Text(if (langTag == "en") "Sunnah Event" else "Ibadah Sunnah") },
+                        trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = sunnahExpanded) },
+                        modifier      = Modifier.menuAnchor().fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(
+                        expanded         = sunnahExpanded,
+                        onDismissRequest = { sunnahExpanded = false },
+                    ) {
+                        if (available.isEmpty()) {
+                            DropdownMenuItem(
+                                text    = { Text(stringResource(R.string.prayer_all_added)) },
+                                onClick = { sunnahExpanded = false },
+                                enabled = false,
+                            )
+                        } else {
+                            available.forEach { sunnah ->
+                                val statusLabel = events.firstOrNull { it.sunnah.name == sunnah.name }?.let { ev ->
+                                    when (ev.status) {
+                                        IslamicEventStatus.ACTIVE   -> " ✅"
+                                        IslamicEventStatus.UPCOMING -> " 🔜"
+                                        else                         -> ""
+                                    }
+                                } ?: ""
+                                DropdownMenuItem(
+                                    text    = { Text("${sunnah.rewardIcon}  ${sunnah.localizedTitle(langTag)}$statusLabel") },
+                                    onClick = { selectedSunnah = sunnah; sunnahExpanded = false },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Preview card
+                selectedSunnah?.let { sunnah ->
+                    Card(
+                        shape  = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = HijriAccent.copy(alpha = 0.07f)
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp, HijriAccentLight.copy(alpha = 0.2f)
+                        ),
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "\"${sunnah.localizedHadith(langTag).take(160)}…\"",
+                                style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(sunnah.localizedSource(langTag), style = MaterialTheme.typography.labelSmall, color = HijriAccentLight)
+                            Spacer(Modifier.height(2.dp))
+                            Row(
+                                modifier              = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(HijriGold.copy(alpha = 0.10f))
+                                    .padding(6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment     = Alignment.CenterVertically,
+                            ) {
+                                Text(sunnah.rewardIcon, fontSize = 14.sp)
+                                Text(sunnah.localizedReward(langTag), style = MaterialTheme.typography.labelSmall, color = HijriGold)
+                            }
+                            Row(
+                                verticalAlignment     = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(Icons.Default.TrackChanges, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    if (langTag == "en") "Goal: ${sunnah.totalDaysGoal} day(s)"
+                                    else "Target: ${sunnah.totalDaysGoal} hari",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Assign to picker
+                ExposedDropdownMenuBox(
+                    expanded         = memberExpanded,
+                    onExpandedChange = { memberExpanded = it },
+                ) {
+                    val allFamilyStr = stringResource(R.string.prayer_all_family)
+                    OutlinedTextField(
+                        value         = if (selectedUserId == null) allFamilyStr
+                                        else allUsers.firstOrNull { it.id == selectedUserId }?.name ?: allFamilyStr,
+                        onValueChange = {},
+                        readOnly      = true,
+                        label         = { Text(stringResource(R.string.prayer_assign_to)) },
+                        trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = memberExpanded) },
+                        modifier      = Modifier.menuAnchor().fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(
+                        expanded         = memberExpanded,
+                        onDismissRequest = { memberExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text    = { Text(allFamilyStr) },
+                            onClick = { selectedUserId = null; memberExpanded = false },
+                        )
+                        allUsers.forEach { user ->
+                            DropdownMenuItem(
+                                text    = { Text("${user.name} (${user.role.displayName})") },
+                                onClick = { selectedUserId = user.id; memberExpanded = false },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick  = {
+                    selectedSunnah?.let { sunnah ->
+                        onAdd(sunnah, selectedUserId?.let { listOf(it) })
+                    }
+                },
+                enabled  = selectedSunnah != null,
+                colors   = ButtonDefaults.buttonColors(containerColor = HijriAccentLight),
+            ) { Text(stringResource(R.string.prayer_add_goal_btn)) }
+        },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },

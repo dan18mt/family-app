@@ -15,7 +15,15 @@ data class PrayerGoalSetting(
     val createdBy: String,
     val createdAt: Long,
 ) {
+    /** Non-null if this goal is a regular (daily) sunnah. */
     val sunnah: SunnahGoal? get() = SunnahGoal.entries.firstOrNull { it.name == sunnahKey }
+
+    /** Non-null if this goal is an Islamic-calendar-based sunnah event. */
+    val islamicCalendarSunnah: IslamicCalendarSunnah?
+        get() = IslamicCalendarSunnah.entries.firstOrNull { it.name == sunnahKey }
+
+    /** True when this goal is an Islamic-calendar event (not a daily habit). */
+    val isIslamicCalendarEvent: Boolean get() = islamicCalendarSunnah != null
 
     fun isAssignedTo(userId: String): Boolean =
         assignedUserIds == null || userId in assignedUserIds
@@ -39,5 +47,20 @@ data class PrayerLog(
     val loggedAt: Long,
 ) {
     val sunnah: SunnahGoal? get() = SunnahGoal.entries.firstOrNull { it.name == sunnahKey }
-    val isCompleted: Boolean get() = sunnah?.let { completedCount >= it.dailyTarget } ?: false
+
+    /**
+     * True when this log entry counts as a completed day.
+     *
+     * For daily [SunnahGoal] entries this compares against [SunnahGoal.dailyTarget].
+     * For Islamic-calendar events ([IslamicCalendarSunnah]) the daily target is always 1
+     * (you either did the ibadah that day or you didn't).
+     */
+    val isCompleted: Boolean
+        get() {
+            SunnahGoal.entries.firstOrNull { it.name == sunnahKey }
+                ?.let { return completedCount >= it.dailyTarget }
+            IslamicCalendarSunnah.entries.firstOrNull { it.name == sunnahKey }
+                ?.let { return completedCount >= 1 }
+            return false
+        }
 }

@@ -128,6 +128,15 @@
     <string name="prayer_add_member_title">Assign to Another Member</string>
     <string name="prayer_all_assigned">All family members are already assigned to this goal.</string>
 
+    <!-- Prayer screen — Islamic calendar sunnah -->
+    <string name="prayer_islamic_calendar_section">Sunnah This Month (Hijri)</string>
+    <string name="prayer_islamic_upcoming">Coming Soon</string>
+    <string name="prayer_islamic_calendar_goals_section">Islamic Calendar Goals</string>
+    <string name="prayer_add_islamic_goal">Add Islamic Calendar Goal</string>
+    <string name="prayer_add_islamic_goal_title">Add Islamic Calendar Sunnah</string>
+    <string name="prayer_add_islamic_family_goal">Set as Family Goal</string>
+    <string name="prayer_islamic_family_this_month">Family — This Month\'s Ibadah</string>
+
     <!-- Prayer screen — family reminders -->
     <string name="prayer_send_reminder">Send reminder</string>
     <string name="prayer_reminder_sent_to">Reminder sent to</string>

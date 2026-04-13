@@ -106,6 +106,15 @@
     <string name="prayer_add_member">Tambah Anggota</string>
     <string name="prayer_add_member_title">Tugaskan ke Anggota Lain</string>
     <string name="prayer_all_assigned">Semua anggota keluarga sudah ditugaskan ke target ini.</string>
+    <!-- Prayer screen — Ibadah Kalender Hijriyah -->
+    <string name="prayer_islamic_calendar_section">Ibadah Sunnah Bulan Ini (Hijriyah)</string>
+    <string name="prayer_islamic_upcoming">Segera Datang</string>
+    <string name="prayer_islamic_calendar_goals_section">Target Kalender Hijriyah</string>
+    <string name="prayer_add_islamic_goal">Tambah Target Kalender Hijriyah</string>
+    <string name="prayer_add_islamic_goal_title">Tambah Ibadah Sunnah Kalender Hijriyah</string>
+    <string name="prayer_add_islamic_family_goal">Jadikan Target Keluarga</string>
+    <string name="prayer_islamic_family_this_month">Keluarga — Ibadah Bulan Ini</string>
+
     <string name="prayer_send_reminder">Kirim pengingat</string>
     <string name="prayer_reminder_sent_to">Pengingat dikirim ke</string>
     <string name="prayer_reminder_from">%1$s mengingatkanmu</string>
