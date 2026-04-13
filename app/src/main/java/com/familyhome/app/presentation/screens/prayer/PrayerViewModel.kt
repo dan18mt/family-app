@@ -13,6 +13,7 @@ import com.familyhome.app.domain.model.PrayerReminderDto
 import com.familyhome.app.domain.model.PrayerGoalSetting
 import com.familyhome.app.domain.model.PrayerLog
 import com.familyhome.app.domain.model.SunnahGoal
+import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.User
 import com.familyhome.app.domain.repository.PrayerRepository
 import com.familyhome.app.domain.usecase.user.GetCurrentUserUseCase
