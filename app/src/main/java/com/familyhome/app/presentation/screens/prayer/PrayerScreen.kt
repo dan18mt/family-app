@@ -802,9 +802,10 @@ private fun FamilySummaryCard(
             )
         }
         else -> {
-            val periodDays = (period.days + 1).toInt()
             val avgRate = state.allUsers.map { member ->
-                state.completedDaysInPeriod(member.id, today - period.days, today).toFloat() / periodDays
+                (0..period.days.toInt()).map { i ->
+                    state.dailyCompletionRate(member.id, today - period.days + i)
+                }.average().toFloat()
             }.average().toFloat()
             Triple(
                 "📈",
