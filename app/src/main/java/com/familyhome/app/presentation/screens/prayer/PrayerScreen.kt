@@ -43,7 +43,7 @@ import com.familyhome.app.R
 import com.familyhome.app.domain.helper.HijriCalendarHelper
 import com.familyhome.app.domain.model.IslamicCalendarSunnah
 import com.familyhome.app.domain.model.IslamicEventCategory
-import com.familyhome.app.domain.model.IslamicEventStatus
+import com.familyhome.app.presentation.screens.prayer.IslamicEventStatus
 import com.familyhome.app.domain.model.PrayerGoalSetting
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.SunnahGoal
