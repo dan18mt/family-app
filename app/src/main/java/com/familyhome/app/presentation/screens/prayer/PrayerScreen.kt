@@ -229,6 +229,7 @@ private fun TodayTab(
     val completedCount = state.completedTodayCount(userId)
     val totalCount     = activeGoals.size
     val allDone        = completedCount == totalCount
+    val today          = remember { System.currentTimeMillis() / PrayerUiState.DAY_MS }
 
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
         item { DailySummaryCard(completed = completedCount, total = totalCount) }
@@ -253,6 +254,14 @@ private fun TodayTab(
         if (allDone) {
             item { AllDoneAchievements(state = state, userId = userId) }
         }
+
+        // ── My History ────────────────────────────────────────────────────
+        item { SectionHeader(stringResource(R.string.prayer_my_history)) }
+        item { WeeklyBarChart(userId = userId, state = state, today = today) }
+        item { SectionHeader(stringResource(R.string.prayer_my_monthly)) }
+        item { MonthlyHeatmap(userId = userId, state = state, today = today) }
+        item { SectionHeader(stringResource(R.string.prayer_my_quarterly)) }
+        item { QuarterlyHeatmap(userId = userId, state = state, today = today) }
     }
 }
 
@@ -585,7 +594,7 @@ private fun HadithBottomSheet(
                 Text(sunnah.rewardIcon, fontSize = 22.sp)
                 Column {
                     Text(
-                        if (langTag == "en") "Reward" else "Pahala",
+                        stringResource(R.string.prayer_hadith_reward),
                         style = MaterialTheme.typography.labelSmall,
                         color = PrayerGold.copy(alpha = 0.7f),
                     )
@@ -616,7 +625,7 @@ private fun HadithBottomSheet(
                         modifier = Modifier.size(18.dp),
                     )
                     Text(
-                        if (langTag == "en") "Completed today — reward earned!" else "Sudah selesai hari ini — pahala diraih!",
+                        stringResource(R.string.prayer_hadith_completed_today),
                         style = MaterialTheme.typography.bodySmall,
                         color = PrayerGreenLight,
                         fontWeight = FontWeight.Medium,
@@ -629,18 +638,18 @@ private fun HadithBottomSheet(
             // Full hadith
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    if (langTag == "en") "Hadith" else "Dalil",
+                    stringResource(R.string.prayer_hadith_label),
                     style      = MaterialTheme.typography.labelMedium,
                     color      = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    "\"${sunnah.hadith}\"",
+                    "\"${sunnah.localizedHadith(langTag)}\"",
                     style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    "— ${sunnah.source}",
+                    "— ${sunnah.localizedSource(langTag)}",
                     style      = MaterialTheme.typography.labelMedium,
                     color      = PrayerGreenLight,
                     fontWeight = FontWeight.Medium,
@@ -660,7 +669,7 @@ private fun HadithBottomSheet(
                         modifier = Modifier.size(16.dp),
                     )
                     Text(
-                        "${if (langTag == "en") "Time window" else "Waktu"}: $window",
+                        "${stringResource(R.string.prayer_hadith_time_window)}: $window",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -764,6 +773,81 @@ private fun AllDoneAchievements(state: PrayerUiState, userId: String) {
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+// ── Family Summary Card ───────────────────────────────────────────────────────
+
+@Composable
+private fun FamilySummaryCard(
+    state: PrayerUiState,
+    period: ProgressPeriod,
+    today: Long,
+) {
+    if (state.allUsers.isEmpty()) return
+
+    val (icon, summaryText, rate) = when (period) {
+        ProgressPeriod.TODAY -> {
+            val completedAll = state.allUsers.count { member ->
+                val goals = state.activeGoalsFor(member.id)
+                goals.isNotEmpty() && state.completedTodayCount(member.id) == goals.size
+            }
+            val total = state.allUsers.size
+            Triple(
+                if (completedAll == total) "🏆" else "📊",
+                stringResource(R.string.prayer_family_summary_all, completedAll, total),
+                if (total > 0) completedAll.toFloat() / total else 0f,
+            )
+        }
+        else -> {
+            val periodDays = (period.days + 1).toInt()
+            val avgRate = state.allUsers.map { member ->
+                state.completedDaysInPeriod(member.id, today - period.days, today).toFloat() / periodDays
+            }.average().toFloat()
+            Triple(
+                "📈",
+                stringResource(R.string.prayer_family_summary_avg, (avgRate * 100).toInt()),
+                avgRate,
+            )
+        }
+    }
+
+    Card(
+        modifier  = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape     = RoundedCornerShape(14.dp),
+        colors    = CardDefaults.cardColors(
+            containerColor = if (rate >= 1f) PrayerGreen else MaterialTheme.colorScheme.surfaceVariant,
+        ),
+        elevation = CardDefaults.cardElevation(1.dp),
+    ) {
+        Row(
+            modifier              = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(icon, fontSize = 28.sp)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    summaryText,
+                    style      = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color      = if (rate >= 1f) Color.White else MaterialTheme.colorScheme.onSurface,
+                )
+                LinearProgressIndicator(
+                    progress   = { rate },
+                    modifier   = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp)
+                        .height(5.dp)
+                        .clip(CircleShape),
+                    color      = if (rate >= 1f) PrayerGoldLight else PrayerGreenLight,
+                    trackColor = if (rate >= 1f) PrayerGreen.copy(alpha = 0.5f)
+                                 else MaterialTheme.colorScheme.surfaceVariant,
+                )
             }
         }
     }
@@ -946,6 +1030,9 @@ private fun FamilyStatsTab(
             )
         }
 
+        // ── Family summary card ───────────────────────────────────────────
+        item { FamilySummaryCard(state = state, period = selectedPeriod, today = today) }
+
         // ── Family Progress ───────────────────────────────────────────────
         item {
             SectionHeader(
@@ -1011,18 +1098,6 @@ private fun FamilyStatsTab(
                 )
             }
         }
-
-        // ── My Weekly Chart ───────────────────────────────────────────────
-        item { SectionHeader(stringResource(R.string.prayer_my_weekly)) }
-        item { WeeklyBarChart(userId = userId, state = state, today = today) }
-
-        // ── My Monthly Heatmap ────────────────────────────────────────────
-        item { SectionHeader(stringResource(R.string.prayer_my_monthly)) }
-        item { MonthlyHeatmap(userId = userId, state = state, today = today) }
-
-        // ── 3-Month Overview ──────────────────────────────────────────────
-        item { SectionHeader(stringResource(R.string.prayer_my_quarterly)) }
-        item { QuarterlyHeatmap(userId = userId, state = state, today = today) }
 
         // ── Achievements ──────────────────────────────────────────────────
         val earnedRewards = state.activeGoalsFor(userId).mapNotNull { it.sunnah }.filter { sunnah ->

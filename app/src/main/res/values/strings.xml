@@ -86,11 +86,19 @@
     <!-- Prayer screen — stats &amp; charts -->
     <string name="prayer_family_today">Family Today</string>
     <string name="prayer_family_progress">Family Progress</string>
+    <string name="prayer_family_summary_all">%1$d of %2$d members completed all goals today</string>
+    <string name="prayer_family_summary_avg">Family average: %1$d%%</string>
     <string name="prayer_family_trend">Family Progress Trend</string>
     <string name="prayer_family_trend_detail">Completion rate over time (%)</string>
+    <string name="prayer_my_history">My History</string>
     <string name="prayer_my_weekly">My Weekly Progress</string>
     <string name="prayer_my_monthly">Monthly Overview</string>
     <string name="prayer_my_quarterly">3-Month Overview</string>
+    <!-- Prayer screen — hadith bottom sheet -->
+    <string name="prayer_hadith_label">Hadith</string>
+    <string name="prayer_hadith_reward">Reward</string>
+    <string name="prayer_hadith_time_window">Time window</string>
+    <string name="prayer_hadith_completed_today">Completed today — reward earned!</string>
     <string name="prayer_last_30_days">Last 30 days</string>
     <string name="prayer_last_90_days">Last 90 days</string>
     <string name="prayer_me">Me</string>
