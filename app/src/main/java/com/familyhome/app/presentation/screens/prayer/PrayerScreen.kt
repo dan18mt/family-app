@@ -103,13 +103,9 @@ fun PrayerScreen(
     val currentUser = state.currentUser
     val isFather    = currentUser?.role == Role.FATHER
 
-    // Tab indices:
-    //   Father  → 0=Today  1=Family  2=Manage
-    //   Others  → 0=Today  1=Family
-    val tabs = if (isFather)
-        listOf(R.string.prayer_tab_today, R.string.prayer_tab_family, R.string.prayer_tab_manage)
-    else
-        listOf(R.string.prayer_tab_today, R.string.prayer_tab_family)
+    // Tab indices: 0=Today  1=Family  2=Manage Goals
+    // All roles see the Manage tab — leaders manage family goals; members manage personal goals.
+    val tabs = listOf(R.string.prayer_tab_today, R.string.prayer_tab_family, R.string.prayer_tab_manage)
 
     var selectedTab       by remember { mutableIntStateOf(0) }
     var showAddGoalDialog by remember { mutableStateOf(false) }
@@ -149,8 +145,7 @@ fun PrayerScreen(
             )
         },
         floatingActionButton = {
-            val manageTabIndex = if (isFather) 2 else -1
-            if (isFather && selectedTab == manageTabIndex) {
+            if (selectedTab == 2) {
                 FloatingActionButton(
                     onClick        = { showAddGoalDialog = true },
                     containerColor = PrayerGreenLight,
@@ -199,21 +194,22 @@ fun PrayerScreen(
                         currentUser    = currentUser,
                         onSendReminder = { userId, name -> viewModel.sendReminder(userId, name) },
                     )
-                isFather && selectedTab == 2 ->
-                    ManageTab(state = state, viewModel = viewModel)
+                selectedTab == 2 ->
+                    ManageTab(state = state, viewModel = viewModel, currentUser = currentUser)
             }
         }
     }
 
     if (showAddGoalDialog) {
         AddGoalDialog(
-            existing  = state.goalSettings,
-            allUsers  = state.allUsers,
-            onAdd     = { sunnahKey, assignedUserIds ->
+            existing    = state.goalSettings,
+            allUsers    = state.allUsers,
+            currentUser = currentUser,
+            onAdd       = { sunnahKey, assignedUserIds ->
                 viewModel.addGoal(sunnahKey, assignedUserIds)
                 showAddGoalDialog = false
             },
-            onDismiss = { showAddGoalDialog = false },
+            onDismiss   = { showAddGoalDialog = false },
         )
     }
 }
@@ -1746,13 +1742,51 @@ private fun AchievementRow(sunnah: SunnahGoal, langTag: String, state: PrayerUiS
 private fun ManageTab(
     state: PrayerUiState,
     viewModel: PrayerViewModel,
+    currentUser: User?,
 ) {
+    val isLeader  = currentUser?.role == Role.FATHER
+    val userId    = currentUser?.id ?: return
     var addMemberGoalId        by remember { mutableStateOf<String?>(null) }
     var showAddIslamicGoalDialog by remember { mutableStateOf(false) }
 
+    val langTag = LocalContext.current.resources.configuration.locales[0].language
+
+    if (isLeader) {
+        LeaderManageTab(
+            state                  = state,
+            viewModel              = viewModel,
+            langTag                = langTag,
+            addMemberGoalId        = addMemberGoalId,
+            onAddMemberGoalId      = { addMemberGoalId = it },
+            showAddIslamicGoalDialog = showAddIslamicGoalDialog,
+            onShowAddIslamicGoalDialog = { showAddIslamicGoalDialog = it },
+        )
+    } else {
+        MemberManageTab(
+            state                  = state,
+            viewModel              = viewModel,
+            currentUserId          = userId,
+            langTag                = langTag,
+            addMemberGoalId        = addMemberGoalId,
+            onAddMemberGoalId      = { addMemberGoalId = it },
+            showAddIslamicGoalDialog = showAddIslamicGoalDialog,
+            onShowAddIslamicGoalDialog = { showAddIslamicGoalDialog = it },
+        )
+    }
+}
+
+@Composable
+private fun LeaderManageTab(
+    state: PrayerUiState,
+    viewModel: PrayerViewModel,
+    langTag: String,
+    addMemberGoalId: String?,
+    onAddMemberGoalId: (String?) -> Unit,
+    showAddIslamicGoalDialog: Boolean,
+    onShowAddIslamicGoalDialog: (Boolean) -> Unit,
+) {
     val dailyGoals   = state.goalSettings.filter { !it.isIslamicCalendarEvent }
     val islamicGoals = state.goalSettings.filter { it.isIslamicCalendarEvent }
-    val langTag      = LocalContext.current.resources.configuration.locales[0].language
 
     LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
         // ── Daily Sunnah Goals ────────────────────────────────────────────
@@ -1778,7 +1812,7 @@ private fun ManageTab(
                     onToggle         = { viewModel.toggleGoal(setting) },
                     onRemove         = { viewModel.removeGoal(setting) },
                     onToggleReminder = { viewModel.toggleReminder(setting) },
-                    onAddMember      = { addMemberGoalId = setting.id },
+                    onAddMember      = { onAddMemberGoalId(setting.id) },
                 )
             }
         }
@@ -1804,7 +1838,7 @@ private fun ManageTab(
                 }
                 if (hasMoreToAdd) {
                     OutlinedButton(
-                        onClick = { showAddIslamicGoalDialog = true },
+                        onClick = { onShowAddIslamicGoalDialog(true) },
                         colors  = ButtonDefaults.outlinedButtonColors(contentColor = HijriAccentLight),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                     ) {
@@ -1822,7 +1856,7 @@ private fun ManageTab(
         if (islamicGoals.isEmpty()) {
             item {
                 ManageIslamicGoalsEmptyCard(
-                    onAdd = { showAddIslamicGoalDialog = true },
+                    onAdd = { onShowAddIslamicGoalDialog(true) },
                     langTag = langTag,
                 )
             }
@@ -1834,7 +1868,7 @@ private fun ManageTab(
                     events           = state.islamicEvents,
                     onToggle         = { viewModel.toggleGoal(setting) },
                     onRemove         = { viewModel.removeGoal(setting) },
-                    onAddMember      = { addMemberGoalId = setting.id },
+                    onAddMember      = { onAddMemberGoalId(setting.id) },
                     langTag          = langTag,
                 )
             }
@@ -1860,12 +1894,12 @@ private fun ManageTab(
             AddMemberDialogUnified(
                 setting   = setting,
                 allUsers  = state.allUsers,
-                langTag   = LocalContext.current.resources.configuration.locales[0].language,
+                langTag   = langTag,
                 onAssign  = { userId ->
                     viewModel.addAssigneeToGoal(targetGoalId, userId)
-                    addMemberGoalId = null
+                    onAddMemberGoalId(null)
                 },
-                onDismiss = { addMemberGoalId = null },
+                onDismiss = { onAddMemberGoalId(null) },
             )
         }
     }
@@ -1876,12 +1910,190 @@ private fun ManageTab(
             existing  = state.goalSettings,
             allUsers  = state.allUsers,
             events    = state.islamicEvents,
-            langTag   = LocalContext.current.resources.configuration.locales[0].language,
+            langTag   = langTag,
             onAdd     = { sunnah, assignedUserIds ->
                 viewModel.addIslamicGoal(sunnah, assignedUserIds)
-                showAddIslamicGoalDialog = false
+                onShowAddIslamicGoalDialog(false)
             },
-            onDismiss = { showAddIslamicGoalDialog = false },
+            onDismiss = { onShowAddIslamicGoalDialog(false) },
+        )
+    }
+}
+
+// ── Member Manage Tab (personal goals only) ───────────────────────────────────
+
+@Composable
+private fun MemberManageTab(
+    state: PrayerUiState,
+    viewModel: PrayerViewModel,
+    currentUserId: String,
+    langTag: String,
+    addMemberGoalId: String?,
+    onAddMemberGoalId: (String?) -> Unit,
+    showAddIslamicGoalDialog: Boolean,
+    onShowAddIslamicGoalDialog: (Boolean) -> Unit,
+) {
+    // Goals assigned by the leader that cover this member (read-only)
+    val familyGoals = state.goalSettings.filter { setting ->
+        !setting.isIslamicCalendarEvent &&
+        !setting.isPersonalGoalOf(currentUserId) &&
+        setting.isAssignedTo(currentUserId)
+    }
+
+    // Goals this member created themselves (only assigned to themselves)
+    val personalGoals = state.goalSettings.filter { it.isPersonalGoalOf(currentUserId) }
+
+    // Islamic calendar goals assigned to this member (personal or family)
+    val islamicGoals = state.goalSettings.filter { setting ->
+        setting.isIslamicCalendarEvent && setting.isAssignedTo(currentUserId)
+    }
+
+    LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
+
+        // ── Family Goals (read-only) ──────────────────────────────────────
+        item { SectionHeader(stringResource(R.string.prayer_family_goals_section)) }
+        if (familyGoals.isEmpty()) {
+            item {
+                Box(
+                    modifier         = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        stringResource(R.string.prayer_no_goals),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        } else {
+            items(familyGoals, key = { it.id }) { setting ->
+                ManageGoalItem(
+                    setting            = setting,
+                    allUsers           = state.allUsers,
+                    onToggle           = {},
+                    onRemove           = {},
+                    onToggleReminder   = {},
+                    onAddMember        = {},
+                    canEdit            = false,
+                    canAddMemberToGoal = false,
+                )
+            }
+        }
+
+        // ── My Personal Goals ─────────────────────────────────────────────
+        item { SectionHeader(stringResource(R.string.prayer_my_personal_goals_section)) }
+        if (personalGoals.isEmpty()) {
+            item {
+                Box(
+                    modifier         = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        stringResource(R.string.prayer_no_personal_goals),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        } else {
+            items(personalGoals, key = { it.id }) { setting ->
+                ManageGoalItem(
+                    setting            = setting,
+                    allUsers           = state.allUsers,
+                    onToggle           = { viewModel.toggleGoal(setting) },
+                    onRemove           = { viewModel.removeGoal(setting) },
+                    onToggleReminder   = { viewModel.toggleReminder(setting) },
+                    onAddMember        = {},
+                    canEdit            = true,
+                    canAddMemberToGoal = false,
+                )
+            }
+        }
+
+        // ── Islamic Calendar Goals ────────────────────────────────────────
+        item {
+            Row(
+                modifier              = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    stringResource(R.string.prayer_islamic_calendar_goals_section),
+                    style      = MaterialTheme.typography.titleSmall,
+                    color      = HijriAccentLight,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                val hasMoreToAdd = IslamicCalendarSunnah.entries.any { sunnah ->
+                    islamicGoals.none { it.sunnahKey == sunnah.name }
+                }
+                if (hasMoreToAdd) {
+                    OutlinedButton(
+                        onClick = { onShowAddIslamicGoalDialog(true) },
+                        colors  = ButtonDefaults.outlinedButtonColors(contentColor = HijriAccentLight),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    ) {
+                        Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            stringResource(R.string.prayer_add_islamic_goal),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+        }
+
+        if (islamicGoals.isEmpty()) {
+            item {
+                ManageIslamicGoalsEmptyCard(
+                    onAdd = { onShowAddIslamicGoalDialog(true) },
+                    langTag = langTag,
+                )
+            }
+        } else {
+            items(islamicGoals, key = { it.id }) { setting ->
+                val isPersonal = setting.isPersonalGoalOf(currentUserId)
+                ManageIslamicGoalItem(
+                    setting     = setting,
+                    allUsers    = state.allUsers,
+                    events      = state.islamicEvents,
+                    onToggle    = { if (isPersonal) viewModel.toggleGoal(setting) },
+                    onRemove    = { if (isPersonal) viewModel.removeGoal(setting) },
+                    onAddMember = {},
+                    langTag     = langTag,
+                    canEdit     = isPersonal,
+                )
+            }
+        }
+
+        item { Spacer(Modifier.height(8.dp)) }
+        item {
+            IslamicCalendarOverview(
+                events    = state.islamicEvents,
+                addedKeys = state.goalSettings
+                    .filter { it.isAssignedTo(currentUserId) }
+                    .map { it.sunnahKey }
+                    .toSet(),
+                langTag   = langTag,
+                onAdd     = { sunnah -> viewModel.addIslamicGoal(sunnah, listOf(currentUserId)) },
+            )
+        }
+    }
+
+    // Add Islamic calendar goal dialog (personal — assigned to self only)
+    if (showAddIslamicGoalDialog) {
+        AddIslamicGoalDialog(
+            existing  = state.goalSettings.filter { it.isAssignedTo(currentUserId) },
+            allUsers  = state.allUsers,
+            events    = state.islamicEvents,
+            langTag   = langTag,
+            onAdd     = { sunnah, _ ->
+                viewModel.addIslamicGoal(sunnah, listOf(currentUserId))
+                onShowAddIslamicGoalDialog(false)
+            },
+            onDismiss = { onShowAddIslamicGoalDialog(false) },
         )
     }
 }
@@ -1894,6 +2106,8 @@ private fun ManageGoalItem(
     onRemove: () -> Unit,
     onToggleReminder: () -> Unit,
     onAddMember: () -> Unit,
+    canEdit: Boolean = true,
+    canAddMemberToGoal: Boolean = true,
 ) {
     val sunnah           = setting.sunnah ?: return
     val langTag          = LocalContext.current.resources.configuration.locales[0].language
@@ -1944,7 +2158,7 @@ private fun ManageGoalItem(
                     Text(sunnah.rewardIcon, fontSize = 18.sp)
                 }
             },
-            trailingContent = {
+            trailingContent = if (canEdit) ({
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(0.dp),
                     verticalAlignment     = Alignment.CenterVertically,
@@ -1961,54 +2175,56 @@ private fun ManageGoalItem(
                         Icon(Icons.Default.Delete, "Remove", tint = MaterialTheme.colorScheme.error)
                     }
                 }
-            },
+            }) else null,
         )
 
-        // Action buttons row
-        Row(
-            modifier              = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // Reminder toggle (only for sunnahs with a fixed time window)
-            if (hasReminderTime) {
-                OutlinedButton(
-                    onClick   = onToggleReminder,
-                    modifier  = Modifier.weight(1f),
-                    colors    = ButtonDefaults.outlinedButtonColors(
-                        contentColor = if (setting.reminderEnabled) PrayerGreenLight
-                                       else MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                ) {
-                    Icon(
-                        if (setting.reminderEnabled) Icons.Default.NotificationsActive
-                        else Icons.Default.NotificationsOff,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        stringResource(
-                            if (setting.reminderEnabled) R.string.prayer_reminder_on
-                            else R.string.prayer_reminder_off
+        // Action buttons row (only shown when the user can edit this goal)
+        if (canEdit) {
+            Row(
+                modifier              = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Reminder toggle (only for sunnahs with a fixed time window)
+                if (hasReminderTime) {
+                    OutlinedButton(
+                        onClick   = onToggleReminder,
+                        modifier  = Modifier.weight(1f),
+                        colors    = ButtonDefaults.outlinedButtonColors(
+                            contentColor = if (setting.reminderEnabled) PrayerGreenLight
+                                           else MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
+                    ) {
+                        Icon(
+                            if (setting.reminderEnabled) Icons.Default.NotificationsActive
+                            else Icons.Default.NotificationsOff,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            stringResource(
+                                if (setting.reminderEnabled) R.string.prayer_reminder_on
+                                else R.string.prayer_reminder_off
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
                 }
-            }
 
-            // Add member button (only if not fully assigned)
-            if (!isFullyAssigned) {
-                OutlinedButton(
-                    onClick  = onAddMember,
-                    modifier = Modifier.weight(1f),
-                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = PrayerGreenLight),
-                ) {
-                    Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(stringResource(R.string.prayer_add_member), style = MaterialTheme.typography.labelSmall)
+                // Add member button (only if leader and not fully assigned)
+                if (canAddMemberToGoal && !isFullyAssigned) {
+                    OutlinedButton(
+                        onClick  = onAddMember,
+                        modifier = Modifier.weight(1f),
+                        colors   = ButtonDefaults.outlinedButtonColors(contentColor = PrayerGreenLight),
+                    ) {
+                        Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.prayer_add_member), style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
         }
@@ -2023,15 +2239,25 @@ private fun ManageGoalItem(
 private fun AddGoalDialog(
     existing: List<PrayerGoalSetting>,
     allUsers: List<User>,
+    currentUser: User?,
     onAdd: (sunnahKey: String, assignedUserIds: List<String>?) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val existingKeys = existing.map { it.sunnahKey }.toSet()
-    val available    = SunnahGoal.entries.filter { it.name !in existingKeys }
-    val langTag      = LocalContext.current.resources.configuration.locales[0].language
+    val isLeader = currentUser?.role == Role.FATHER
+    val langTag  = LocalContext.current.resources.configuration.locales[0].language
+
+    // Leaders: hide goals already added at all. Members: hide goals they're already in.
+    val available = if (isLeader) {
+        val existingKeys = existing.map { it.sunnahKey }.toSet()
+        SunnahGoal.entries.filter { it.name !in existingKeys }
+    } else {
+        SunnahGoal.entries.filter { sunnah ->
+            existing.none { it.sunnahKey == sunnah.name && it.isAssignedTo(currentUser!!.id) }
+        }
+    }
 
     var selectedSunnah   by remember { mutableStateOf<SunnahGoal?>(null) }
-    var selectedUserId   by remember { mutableStateOf<String?>(null) } // null = all family
+    var selectedUserId   by remember { mutableStateOf<String?>(null) } // null = all family (leader only)
     var sunnahExpanded   by remember { mutableStateOf(false) }
     var memberExpanded   by remember { mutableStateOf(false) }
 
@@ -2116,34 +2342,36 @@ private fun AddGoalDialog(
                     }
                 }
 
-                // Assign to picker
-                ExposedDropdownMenuBox(
-                    expanded         = memberExpanded,
-                    onExpandedChange = { memberExpanded = it },
-                ) {
-                    val allFamilyStr = stringResource(R.string.prayer_all_family)
-                    OutlinedTextField(
-                        value         = if (selectedUserId == null) allFamilyStr
-                                        else allUsers.firstOrNull { it.id == selectedUserId }?.name ?: allFamilyStr,
-                        onValueChange = {},
-                        readOnly      = true,
-                        label         = { Text(stringResource(R.string.prayer_assign_to)) },
-                        trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = memberExpanded) },
-                        modifier      = Modifier.menuAnchor().fillMaxWidth(),
-                    )
-                    ExposedDropdownMenu(
+                // Assign to picker — only shown for the family leader
+                if (isLeader) {
+                    ExposedDropdownMenuBox(
                         expanded         = memberExpanded,
-                        onDismissRequest = { memberExpanded = false },
+                        onExpandedChange = { memberExpanded = it },
                     ) {
-                        DropdownMenuItem(
-                            text    = { Text(allFamilyStr) },
-                            onClick = { selectedUserId = null; memberExpanded = false },
+                        val allFamilyStr = stringResource(R.string.prayer_all_family)
+                        OutlinedTextField(
+                            value         = if (selectedUserId == null) allFamilyStr
+                                            else allUsers.firstOrNull { it.id == selectedUserId }?.name ?: allFamilyStr,
+                            onValueChange = {},
+                            readOnly      = true,
+                            label         = { Text(stringResource(R.string.prayer_assign_to)) },
+                            trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = memberExpanded) },
+                            modifier      = Modifier.menuAnchor().fillMaxWidth(),
                         )
-                        allUsers.forEach { user ->
+                        ExposedDropdownMenu(
+                            expanded         = memberExpanded,
+                            onDismissRequest = { memberExpanded = false },
+                        ) {
                             DropdownMenuItem(
-                                text    = { Text("${user.name} (${user.role.displayName})") },
-                                onClick = { selectedUserId = user.id; memberExpanded = false },
+                                text    = { Text(allFamilyStr) },
+                                onClick = { selectedUserId = null; memberExpanded = false },
                             )
+                            allUsers.forEach { user ->
+                                DropdownMenuItem(
+                                    text    = { Text("${user.name} (${user.role.displayName})") },
+                                    onClick = { selectedUserId = user.id; memberExpanded = false },
+                                )
+                            }
                         }
                     }
                 }
@@ -2153,7 +2381,12 @@ private fun AddGoalDialog(
             Button(
                 onClick  = {
                     selectedSunnah?.let { sunnah ->
-                        val assignedUserIds = selectedUserId?.let { listOf(it) }
+                        val assignedUserIds = if (isLeader) {
+                            selectedUserId?.let { listOf(it) }
+                        } else {
+                            // Members always create a personal goal assigned to themselves
+                            currentUser?.id?.let { listOf(it) } ?: return@let
+                        }
                         onAdd(sunnah.name, assignedUserIds)
                     }
                 },
@@ -2663,6 +2896,7 @@ private fun ManageIslamicGoalItem(
     onRemove: () -> Unit,
     onAddMember: () -> Unit,
     langTag: String,
+    canEdit: Boolean = true,
 ) {
     val sunnah         = setting.islamicCalendarSunnah ?: return
     val eventInfo      = events.firstOrNull { it.sunnah.name == sunnah.name }
@@ -2721,7 +2955,7 @@ private fun ManageIslamicGoalItem(
                     Text(sunnah.rewardIcon, fontSize = 18.sp)
                 }
             },
-            trailingContent = {
+            trailingContent = if (canEdit) ({
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(0.dp),
                     verticalAlignment     = Alignment.CenterVertically,
@@ -2738,9 +2972,9 @@ private fun ManageIslamicGoalItem(
                         Icon(Icons.Default.Delete, "Remove", tint = MaterialTheme.colorScheme.error)
                     }
                 }
-            },
+            }) else null,
         )
-        if (!isFullyAssigned) {
+        if (canEdit && !isFullyAssigned) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

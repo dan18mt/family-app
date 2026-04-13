@@ -36,6 +36,13 @@ data class PrayerGoalSetting(
     fun unassignedFrom(allUserIds: List<String>): List<String> =
         if (assignedUserIds == null) emptyList()
         else allUserIds.filter { it !in assignedUserIds }
+
+    /**
+     * True when this goal was created by [userId] and is assigned only to themselves.
+     * Distinguishes a self-initiated personal goal from a family goal set by the leader.
+     */
+    fun isPersonalGoalOf(userId: String): Boolean =
+        createdBy == userId && assignedUserIds?.size == 1 && assignedUserIds[0] == userId
 }
 
 data class PrayerLog(

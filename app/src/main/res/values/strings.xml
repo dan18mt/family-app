@@ -70,7 +70,7 @@
     <string name="prayer_today_progress">Today\'s Progress</string>
     <string name="prayer_all_done">MashaAllah! All goals completed! 🏆</string>
     <string name="prayer_no_goals">No goals set yet</string>
-    <string name="prayer_no_goals_hint">Ask your family leader to add sunnah goals</string>
+    <string name="prayer_no_goals_hint">Go to Manage Goals to add your personal sunnah goals</string>
     <string name="prayer_no_goals_manage_hint">Tap the + button to add your first sunnah goal</string>
     <string name="prayer_add_goal">Add Sunnah Goal</string>
     <string name="prayer_add_goal_btn">Add Goal</string>
@@ -78,6 +78,10 @@
     <string name="prayer_all_family">All family members</string>
     <string name="prayer_active_goals">Active Goals</string>
     <string name="prayer_no_goals_manage">No goals added yet. Tap + to add a sunnah goal for your family.</string>
+    <string name="prayer_family_goals_section">Family Goals</string>
+    <string name="prayer_my_personal_goals_section">My Personal Goals</string>
+    <string name="prayer_no_personal_goals">No personal goals yet. Tap + to add a sunnah you want to track on your own.</string>
+    <string name="prayer_personal_goal_label">Personal goal</string>
     <string name="prayer_today_goals">Today\'s Goals</string>
     <string name="prayer_goals_remaining">%1$d goal(s) remaining</string>
     <string name="prayer_assign_to">Assign to</string>

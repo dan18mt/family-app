@@ -329,9 +329,9 @@ class PrayerViewModel @Inject constructor(
         }
     }
 
-    // ── Goal management (leader only) ────────────────────────────────────────
+    // ── Goal management ──────────────────────────────────────────────────────
 
-    /** Enable or disable a sunnah goal. */
+    /** Enable or disable a sunnah goal (leader for family goals; any member for their own personal goals). */
     fun toggleGoal(setting: PrayerGoalSetting) {
         viewModelScope.launch {
             prayerRepository.updateGoalSetting(setting.copy(isEnabled = !setting.isEnabled))
@@ -340,11 +340,20 @@ class PrayerViewModel @Inject constructor(
 
     /**
      * Add a new goal for [sunnahKey].
-     * [assignedUserIds] = null → all family. Single-element list → specific member.
+     * Leaders: [assignedUserIds] = null → all family; list → specific members.
+     * Non-leaders: always creates a personal goal ([assignedUserIds] = [self]).
      */
     fun addGoal(sunnahKey: String, assignedUserIds: List<String>?) {
         val user = _state.value.currentUser ?: return
-        if (_state.value.goalSettings.any { it.sunnahKey == sunnahKey }) return
+        val isLeader = user.role == Role.FATHER
+        // Leaders: no duplicate sunnahKey allowed at all.
+        // Members: only block if already assigned to any existing goal for this sunnahKey.
+        val alreadyExists = if (isLeader) {
+            _state.value.goalSettings.any { it.sunnahKey == sunnahKey }
+        } else {
+            _state.value.goalSettings.any { it.sunnahKey == sunnahKey && it.isAssignedTo(user.id) }
+        }
+        if (alreadyExists) return
         viewModelScope.launch {
             prayerRepository.insertGoalSetting(
                 PrayerGoalSetting(
@@ -409,8 +418,14 @@ class PrayerViewModel @Inject constructor(
         }
     }
 
-    /** Delete a goal (leader only). Records deletion so it propagates via sync. */
+    /**
+     * Delete a goal. Leaders can delete any goal; other members can only delete their own
+     * personal goals (self-created, self-assigned).
+     */
     fun removeGoal(setting: PrayerGoalSetting) {
+        val user = _state.value.currentUser ?: return
+        val isLeader = user.role == Role.FATHER
+        if (!isLeader && !setting.isPersonalGoalOf(user.id)) return
         viewModelScope.launch {
             prayerRepository.deleteGoalSetting(setting.id)
             deletionTracker.recordPrayerGoalDeletion(setting.id)
@@ -452,7 +467,13 @@ class PrayerViewModel @Inject constructor(
      */
     fun addIslamicGoal(sunnah: IslamicCalendarSunnah, assignedUserIds: List<String>?) {
         val user = _state.value.currentUser ?: return
-        if (_state.value.goalSettings.any { it.sunnahKey == sunnah.name }) return
+        val isLeader = user.role == Role.FATHER
+        val alreadyExists = if (isLeader) {
+            _state.value.goalSettings.any { it.sunnahKey == sunnah.name }
+        } else {
+            _state.value.goalSettings.any { it.sunnahKey == sunnah.name && it.isAssignedTo(user.id) }
+        }
+        if (alreadyExists) return
         viewModelScope.launch {
             prayerRepository.insertGoalSetting(
                 PrayerGoalSetting(

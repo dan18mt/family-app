@@ -80,6 +80,14 @@ object PermissionManager {
     fun canViewBudgets(actor: User): Boolean =
         actor.role == Role.FATHER || actor.role == Role.WIFE
 
+    // ── Prayer goals ─────────────────────────────────────────────────────────
+
+    /** Only the family leader can create/edit/delete goals assigned to the whole family. */
+    fun canManageFamilyGoal(actor: User): Boolean = actor.role == Role.FATHER
+
+    /** Any member can add a personal goal (one assigned only to themselves). */
+    fun canAddPersonalGoal(actor: User): Boolean = true
+
     // ── Sync ─────────────────────────────────────────────────────────────────
 
     /** Only the host (typically Father) starts the sync server. */

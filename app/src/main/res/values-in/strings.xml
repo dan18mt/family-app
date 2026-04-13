@@ -69,12 +69,16 @@
     <string name="prayer_today_progress">Progres Hari Ini</string>
     <string name="prayer_all_done">Masya Allah! Semua target selesai hari ini!</string>
     <string name="prayer_no_goals">Belum ada target</string>
-    <string name="prayer_no_goals_hint">Minta pemimpin keluarga untuk menambahkan target sunnah</string>
+    <string name="prayer_no_goals_hint">Buka Kelola Target untuk menambahkan target sunnah pribadimu</string>
     <string name="prayer_add_goal">Tambah Target Sunnah</string>
     <string name="prayer_assigned_to">Ditugaskan ke: %1$s</string>
     <string name="prayer_all_family">Semua anggota keluarga</string>
     <string name="prayer_active_goals">Target Aktif</string>
     <string name="prayer_no_goals_manage">Belum ada target. Ketuk + untuk menambahkan target sunnah untuk keluarga.</string>
+    <string name="prayer_family_goals_section">Target Keluarga</string>
+    <string name="prayer_my_personal_goals_section">Target Pribadi Saya</string>
+    <string name="prayer_no_personal_goals">Belum ada target pribadi. Ketuk + untuk menambahkan sunnah yang ingin kamu lakukan sendiri.</string>
+    <string name="prayer_personal_goal_label">Target pribadi</string>
     <string name="prayer_today_goals">Target Hari Ini</string>
     <string name="prayer_family_today">Keluarga Hari Ini</string>
     <string name="prayer_family_progress">Kemajuan Keluarga</string>
