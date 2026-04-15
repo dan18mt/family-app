@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,14 +39,21 @@ class DeletionTracker @Inject constructor(
 
     val deletedUserIds: StateFlow<Set<String>> = _deletedUserIds.asStateFlow()
 
+    // Signals when persisted deletions have been loaded from DataStore into memory.
+    // Callers that run on startup must await this before reading deletion sets.
+    private val ready = CompletableDeferred<Unit>()
+
     init {
         scope.launch {
             val prefs = dataStore.data.first()
             _deletedUserIds.value       = prefs[deletedUserIdsKey]       ?: emptySet()
             _deletedPrayerGoalIds.value = prefs[deletedPrayerGoalIdsKey] ?: emptySet()
             _deletedBudgetIds.value     = prefs[deletedBudgetIdsKey]     ?: emptySet()
+            ready.complete(Unit)
         }
     }
+
+    suspend fun awaitReady() = ready.await()
 
     // ── Users ────────────────────────────────────────────────────────────────
 

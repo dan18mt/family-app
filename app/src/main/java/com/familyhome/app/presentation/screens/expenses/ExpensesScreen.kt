@@ -653,6 +653,7 @@ private fun ExpenseRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    var showMenu by remember { mutableStateOf(false) }
     val fmt       = SimpleDateFormat("dd MMM", Locale.getDefault())
     val amountFmt = NumberFormat.getCurrencyInstance(Locale("id", "ID")).format(expense.amount / 100.0)
     val categoryLabel = if (expense.customCategoryId != null) {
@@ -670,7 +671,7 @@ private fun ExpenseRow(
     val payerName = if (showPayer) allUsers.find { it.id == expense.paidBy }?.name else null
 
     ListItem(
-        headlineContent   = { Text(expense.description) },
+        headlineContent   = { Text(expense.description, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
         supportingContent = {
             Column {
                 Text("$categoryLabel · ${fmt.format(Date(expense.expenseDate))}")
@@ -690,13 +691,25 @@ private fun ExpenseRow(
                     }
                 }
                 if (canEdit) {
-                    IconButton(onClick = onEdit) {
-                        Icon(Icons.Default.Edit, "Edit", tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp))
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(18.dp))
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, "More options")
+                        }
+                        DropdownMenu(
+                            expanded         = showMenu,
+                            onDismissRequest = { showMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text        = { Text("Edit") },
+                                leadingIcon = { Icon(Icons.Default.Edit, null) },
+                                onClick     = { showMenu = false; onEdit() },
+                            )
+                            DropdownMenuItem(
+                                text        = { Text("Delete") },
+                                leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                                onClick     = { showMenu = false; onDelete() },
+                            )
+                        }
                     }
                 }
             }

@@ -225,11 +225,12 @@ private fun RecurringTaskRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    var showMenu by remember { mutableStateOf(false) }
     val fmt = SimpleDateFormat("EEE, dd MMM HH:mm", Locale.getDefault())
     val assigneeName = task.assignedTo?.let { id -> allUsers.find { it.id == id }?.name }
 
     ListItem(
-        headlineContent   = { Text(task.taskName) },
+        headlineContent   = { Text(task.taskName, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
         supportingContent = {
             Column {
                 if (task.scheduledAt != null) {
@@ -262,22 +263,42 @@ private fun RecurringTaskRow(
             )
         },
         trailingContent = {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (canAssign) {
-                    IconButton(onClick = onAssign) {
-                        Icon(Icons.Default.PersonAdd, "Assign task",
-                            tint = MaterialTheme.colorScheme.secondary)
-                    }
-                }
-                if (canEdit) {
-                    IconButton(onClick = onEdit) {
-                        Icon(Icons.Default.Edit, "Edit task", tint = MaterialTheme.colorScheme.primary)
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Default.Delete, "Delete task", tint = MaterialTheme.colorScheme.error)
-                    }
-                }
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
                 FilledTonalButton(onClick = onComplete) { Text("Done") }
+                if (canEdit || canAssign) {
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, "More options")
+                        }
+                        DropdownMenu(
+                            expanded         = showMenu,
+                            onDismissRequest = { showMenu = false },
+                        ) {
+                            if (canAssign) {
+                                DropdownMenuItem(
+                                    text        = { Text("Assign") },
+                                    leadingIcon = { Icon(Icons.Default.PersonAdd, null, tint = MaterialTheme.colorScheme.secondary) },
+                                    onClick     = { showMenu = false; onAssign() },
+                                )
+                            }
+                            if (canEdit) {
+                                DropdownMenuItem(
+                                    text        = { Text("Edit") },
+                                    leadingIcon = { Icon(Icons.Default.Edit, null) },
+                                    onClick     = { showMenu = false; onEdit() },
+                                )
+                                DropdownMenuItem(
+                                    text        = { Text("Delete") },
+                                    leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                                    onClick     = { showMenu = false; onDelete() },
+                                )
+                            }
+                        }
+                    }
+                }
             }
         },
     )

@@ -36,6 +36,7 @@ import com.familyhome.app.domain.model.AppLanguage
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.User
 import com.familyhome.app.presentation.components.AvatarInitials
+import com.familyhome.app.presentation.components.DraggableFab
 import com.familyhome.app.presentation.components.SectionHeader
 import com.familyhome.app.presentation.navigation.Screen
 import com.familyhome.app.presentation.theme.BudgetWarningColor
@@ -111,19 +112,7 @@ fun HomeScreen(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            if (state.currentUser?.role == Role.FATHER) {
-                FloatingActionButton(
-                    onClick        = { onNavigateTo(Screen.ManageMembers) },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor   = MaterialTheme.colorScheme.onPrimary,
-                    shape          = RoundedCornerShape(16.dp),
-                ) {
-                    Icon(Icons.Default.PersonAdd, contentDescription = "Invite")
-                }
-            }
-        },
+        snackbarHost   = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         val lowCount     = state.lowStockItems.size
@@ -131,9 +120,10 @@ fun HomeScreen(
         val pendingCount = state.pendingJoinRequests.size + state.pendingKnocks.size
         val warnings     = state.budgetAlerts.filter { it.isWarning }
 
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
         LazyColumn(
-            modifier       = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(bottom = 32.dp),
+            modifier       = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 88.dp),
         ) {
             // ── Hero banner ──────────────────────────────────────────────────
             item {
@@ -313,6 +303,18 @@ fun HomeScreen(
                 }
             }
         }
+
+        if (state.currentUser?.role == Role.FATHER) {
+            DraggableFab(
+                onClick        = { onNavigateTo(Screen.ManageMembers) },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor   = MaterialTheme.colorScheme.onPrimary,
+                shape          = RoundedCornerShape(16.dp),
+            ) {
+                Icon(Icons.Default.PersonAdd, contentDescription = "Invite")
+            }
+        }
+        } // end Box
     }
 }
 

@@ -147,8 +147,8 @@ class FamilyBackgroundService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("FamilyHome")
-            .setContentText("Connected and syncing in background")
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText(getString(R.string.service_notification_text))
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setContentIntent(tapIntent)
@@ -163,10 +163,10 @@ class FamilyBackgroundService : Service() {
             if (nm.getNotificationChannel(CHANNEL_ID) == null) {
                 nm.createNotificationChannel(NotificationChannel(
                     CHANNEL_ID,
-                    "Background sync",
+                    getString(R.string.service_channel_name),
                     NotificationManager.IMPORTANCE_MIN,
                 ).apply {
-                    description = "Keeps FamilyHome connected and syncing in the background"
+                    description = getString(R.string.service_channel_description)
                     setShowBadge(false)
                 })
             }

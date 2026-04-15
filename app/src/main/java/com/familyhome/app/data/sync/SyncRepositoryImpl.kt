@@ -78,6 +78,10 @@ class SyncRepositoryImpl @Inject constructor(
         val ip = context.dataStore.data.first()[hostIpKey]
             ?: return SyncResult.Error("Host IP not configured.")
 
+        // Ensure persisted deletions are loaded before building the local payload,
+        // preventing a cold-start race where deletedBudgetIds would appear empty.
+        deletionTracker.awaitReady()
+
         return runCatching {
             // 1. Push local snapshot to host (excluding locally-tracked deleted users)
             val localPayload = buildLocalPayload()

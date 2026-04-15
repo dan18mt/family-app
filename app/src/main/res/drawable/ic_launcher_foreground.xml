@@ -5,22 +5,26 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- House body: roof peak → right eave → right wall → right base →
-         door right → door top-right → door top-left → door left → left base →
-         left wall → left eave → back to peak -->
+    <!-- House body (scaled to ~70%, peak at y=32, base at y=80) -->
+    <!-- roof peak → right eave → right wall → right base →
+         door right → door top → door top → door left →
+         left base → left wall → left eave → back to peak -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="
-          M54,20 L96,54 L86,54 L86,88 L64,88 L64,70 L44,70 L44,88 L22,88 L22,54 L12,54 Z" />
+        android:pathData="M54,32 L84,56 L77,56 L77,80 L63,80 L63,67 L45,67 L45,80 L31,80 L31,56 L24,56 Z" />
 
-    <!-- Crescent moon inside the house body (above the door) -->
-    <!-- Outer circle: center (54,61), r=9 -->
-    <!-- Inner circle: center (58,61), r=7.2  — shifted right to carve the crescent -->
-    <!-- Intersection x=62.1, y=61±5.4 → (62.1,55.6) and (62.1,66.4) -->
+    <!-- Crescent moon (upper-right sky area, white on teal background) -->
+    <!-- Outer circle: center (76,24), r=9 -->
+    <!-- Inner circle: center (80,24), r=7.2 (shifted right 4) -->
+    <!-- Intersection x=81.6, y=24±7.0 → (81.6,17.0) and (81.6,31.0) -->
     <path
-        android:fillColor="#004D40"
-        android:pathData="
-          M62.1,55.6
-          A9,9 0 1,0 62.1,66.4
-          A7.2,7.2 0 0,0 62.1,55.6 Z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M81.6,17 A9,9 0 1,0 81.6,31 A7.2,7.2 0 0,1 81.6,17 Z" />
+
+    <!-- 4-point star (upper sky, left of crescent) -->
+    <!-- Center (61,22), outer radius 3.5, inner radius 1.5 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M61,18.5 L62.2,20.8 L64.5,22 L62.2,23.2 L61,25.5 L59.8,23.2 L57.5,22 L59.8,20.8 Z" />
+
 </vector>

@@ -187,6 +187,12 @@ class SyncServer @Inject constructor(
         payload.recurringTasks?.let        { choreRepository.upsertAllRecurring(it.map { dto -> dto.toDomain() }) }
         payload.choreAssignments?.let      { choreRepository.upsertAllAssignments(it.map { dto -> dto.toAssignmentDomain() }) }
         payload.expenses?.let              { expenseRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
+        payload.deletedBudgetIds?.let { ids ->
+            ids.forEach { id ->
+                budgetRepository.deleteBudget(id)
+                deletionTracker.recordBudgetDeletion(id)
+            }
+        }
         payload.budgets?.let { dtos ->
             val deletedBudgetIds = deletionTracker.getDeletedBudgetIds()
             val toUpsert = dtos.filter { it.id !in deletedBudgetIds }
@@ -201,6 +207,12 @@ class SyncServer @Inject constructor(
             customExpenseCategoryRepository.upsertAll(
                 dtos.map { dto -> com.familyhome.app.domain.model.CustomExpenseCategory(dto.id, dto.name, dto.iconName) }
             )
+        }
+        payload.deletedPrayerGoalIds?.let { ids ->
+            ids.forEach { id ->
+                prayerRepository.deleteGoalSetting(id)
+                deletionTracker.recordPrayerGoalDeletion(id)
+            }
         }
         payload.prayerGoalSettings?.let { dtos ->
             val deletedGoalIds = deletionTracker.getDeletedPrayerGoalIds()

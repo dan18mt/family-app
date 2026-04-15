@@ -150,6 +150,11 @@
     <string name="expenses_period_week">Minggu</string>
     <string name="expenses_all_members">Semua</string>
 
+    <!-- Background service notification -->
+    <string name="service_notification_text">Terhubung dan menyinkron di latar belakang</string>
+    <string name="service_channel_name">Sinkronisasi latar belakang</string>
+    <string name="service_channel_description">Menjaga Baiti Jannati tetap terhubung dan menyinkron di latar belakang</string>
+
     <!-- Language -->
     <string name="settings_language">Bahasa</string>
     <string name="language_english">English</string>

@@ -163,6 +163,11 @@
     <string name="expenses_period_week">Week</string>
     <string name="expenses_all_members">All</string>
 
+    <!-- Background service notification -->
+    <string name="service_notification_text">Connected and syncing in background</string>
+    <string name="service_channel_name">Background sync</string>
+    <string name="service_channel_description">Keeps Baiti Jannati connected and syncing in the background</string>
+
     <!-- Language -->
     <string name="settings_language">Language</string>
     <string name="language_english">English</string>
