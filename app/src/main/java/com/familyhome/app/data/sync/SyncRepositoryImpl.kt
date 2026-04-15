@@ -141,11 +141,17 @@ class SyncRepositoryImpl @Inject constructor(
                 .map { it.toDto() },
             stockItems            = stockRepository.getAllItems().first().map { it.toDto() },
             choreLogs             = choreRepository.getChoreHistory(0L).first().map { it.toDto() },
-            recurringTasks        = choreRepository.getRecurringTasks().first().map { it.toDto() },
+            recurringTasks        = choreRepository.getRecurringTasks().first()
+                .filter { it.id !in deletionTracker.getDeletedRecurringTaskIds() }
+                .map { it.toDto() },
             choreAssignments      = choreRepository.getAllAssignments().first().map { it.toAssignmentDto() },
             expenses              = expenseRepository.getAllExpenses().first().map { it.toDto() },
-            budgets               = budgetRepository.getAllBudgets().first().map { it.toDto() },
-            deletedBudgetIds      = deletionTracker.getDeletedBudgetIds().toList().ifEmpty { null },
+            // Filter out locally-known deleted items so they are never re-pushed to the host
+            budgets               = budgetRepository.getAllBudgets().first()
+                .filter { it.id !in deletionTracker.getDeletedBudgetIds() }
+                .map { it.toDto() },
+            deletedBudgetIds          = deletionTracker.getDeletedBudgetIds().toList().ifEmpty { null },
+            deletedRecurringTaskIds   = deletionTracker.getDeletedRecurringTaskIds().toList().ifEmpty { null },
             customStockCategories = customStockCategoryRepository.getAllCategories().first()
                 .map { CustomStockCategoryDto(it.id, it.name, it.iconName) },
             customExpenseCategories = customExpenseCategoryRepository.getAllCategories().first()
@@ -182,7 +188,18 @@ class SyncRepositoryImpl @Inject constructor(
         }
         payload.stockItems?.let            { stockRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
         payload.choreLogs?.let             { choreRepository.upsertAllLogs(it.map { dto -> dto.toDomain() }) }
-        payload.recurringTasks?.let        { choreRepository.upsertAllRecurring(it.map { dto -> dto.toDomain() }) }
+        // Apply recurring task deletions from any device before upserting
+        payload.deletedRecurringTaskIds?.let { ids ->
+            ids.forEach { id ->
+                choreRepository.deleteRecurringTask(id)
+                deletionTracker.recordRecurringTaskDeletion(id)
+            }
+        }
+        payload.recurringTasks?.let { dtos ->
+            val deletedTaskIds = deletionTracker.getDeletedRecurringTaskIds()
+            val toUpsert = dtos.filter { it.id !in deletedTaskIds }
+            if (toUpsert.isNotEmpty()) choreRepository.upsertAllRecurring(toUpsert.map { it.toDomain() })
+        }
         payload.choreAssignments?.let      { choreRepository.upsertAllAssignments(it.map { dto -> dto.toAssignmentDomain() }) }
         payload.expenses?.let              { expenseRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
         // Apply budget deletions from leader before upserting
@@ -271,12 +288,13 @@ class SyncRepositoryImpl @Inject constructor(
             presenceTracker.updateWithTimestamp(userId, lastSeenAt)
         }
 
-        // 4. Schedule any alarms for tasks assigned to this user
+        // 4. Schedule any alarms for tasks assigned to this user (skip deleted tasks)
         payload.recurringTasks?.let { dtos ->
             val currentUserId = sessionRepository.getCurrentUserId()
             if (currentUserId != null) {
+                val deletedTaskIds = deletionTracker.getDeletedRecurringTaskIds()
                 val now = System.currentTimeMillis()
-                dtos.forEach { dto ->
+                dtos.filter { it.id !in deletedTaskIds }.forEach { dto ->
                     val task = dto.toDomain()
                     if (task.assignedTo == currentUserId &&
                         task.scheduledAt != null &&

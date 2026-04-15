@@ -29,13 +29,15 @@ class DeletionTracker @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val deletedUserIdsKey        = stringSetPreferencesKey("deleted_user_ids")
-    private val deletedPrayerGoalIdsKey  = stringSetPreferencesKey("deleted_prayer_goal_ids")
-    private val deletedBudgetIdsKey      = stringSetPreferencesKey("deleted_budget_ids")
+    private val deletedUserIdsKey             = stringSetPreferencesKey("deleted_user_ids")
+    private val deletedPrayerGoalIdsKey       = stringSetPreferencesKey("deleted_prayer_goal_ids")
+    private val deletedBudgetIdsKey           = stringSetPreferencesKey("deleted_budget_ids")
+    private val deletedRecurringTaskIdsKey    = stringSetPreferencesKey("deleted_recurring_task_ids")
 
-    private val _deletedUserIds       = MutableStateFlow<Set<String>>(emptySet())
-    private val _deletedPrayerGoalIds = MutableStateFlow<Set<String>>(emptySet())
-    private val _deletedBudgetIds     = MutableStateFlow<Set<String>>(emptySet())
+    private val _deletedUserIds            = MutableStateFlow<Set<String>>(emptySet())
+    private val _deletedPrayerGoalIds      = MutableStateFlow<Set<String>>(emptySet())
+    private val _deletedBudgetIds          = MutableStateFlow<Set<String>>(emptySet())
+    private val _deletedRecurringTaskIds   = MutableStateFlow<Set<String>>(emptySet())
 
     val deletedUserIds: StateFlow<Set<String>> = _deletedUserIds.asStateFlow()
 
@@ -46,9 +48,10 @@ class DeletionTracker @Inject constructor(
     init {
         scope.launch {
             val prefs = dataStore.data.first()
-            _deletedUserIds.value       = prefs[deletedUserIdsKey]       ?: emptySet()
-            _deletedPrayerGoalIds.value = prefs[deletedPrayerGoalIdsKey] ?: emptySet()
-            _deletedBudgetIds.value     = prefs[deletedBudgetIdsKey]     ?: emptySet()
+            _deletedUserIds.value          = prefs[deletedUserIdsKey]          ?: emptySet()
+            _deletedPrayerGoalIds.value    = prefs[deletedPrayerGoalIdsKey]    ?: emptySet()
+            _deletedBudgetIds.value        = prefs[deletedBudgetIdsKey]        ?: emptySet()
+            _deletedRecurringTaskIds.value = prefs[deletedRecurringTaskIdsKey] ?: emptySet()
             ready.complete(Unit)
         }
     }
@@ -93,4 +96,17 @@ class DeletionTracker @Inject constructor(
     fun getDeletedBudgetIds(): Set<String> = _deletedBudgetIds.value
 
     fun isBudgetDeleted(id: String): Boolean = _deletedBudgetIds.value.contains(id)
+
+    // ── Recurring tasks ──────────────────────────────────────────────────────
+
+    suspend fun recordRecurringTaskDeletion(id: String) {
+        _deletedRecurringTaskIds.value = _deletedRecurringTaskIds.value + id
+        dataStore.edit { prefs ->
+            prefs[deletedRecurringTaskIdsKey] = (prefs[deletedRecurringTaskIdsKey] ?: emptySet()) + id
+        }
+    }
+
+    fun getDeletedRecurringTaskIds(): Set<String> = _deletedRecurringTaskIds.value
+
+    fun isRecurringTaskDeleted(id: String): Boolean = _deletedRecurringTaskIds.value.contains(id)
 }

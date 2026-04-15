@@ -3,6 +3,7 @@ package com.familyhome.app.presentation.screens.chores
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.familyhome.app.data.notification.AlarmScheduler
+import com.familyhome.app.data.sync.DeletionTracker
 import com.familyhome.app.domain.model.ChoreAssignment
 import com.familyhome.app.domain.model.ChoreLog
 import com.familyhome.app.domain.model.Frequency
@@ -44,6 +45,7 @@ class ChoresViewModel @Inject constructor(
     private val respondToAssignmentUseCase: RespondToChoreAssignmentUseCase,
     private val getChoreAssignmentsUseCase: GetChoreAssignmentsUseCase,
     private val alarmScheduler: AlarmScheduler,
+    private val deletionTracker: DeletionTracker,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChoresUiState())
@@ -101,6 +103,7 @@ class ChoresViewModel @Inject constructor(
         viewModelScope.launch {
             completeRecurringTaskUseCase(user, task)
             alarmScheduler.cancel(task.id)
+            deletionTracker.recordRecurringTaskDeletion(task.id)
         }
     }
 
@@ -144,6 +147,7 @@ class ChoresViewModel @Inject constructor(
         val user = _state.value.currentUser ?: return
         viewModelScope.launch {
             deleteRecurringTaskUseCase(user, task)
+                .onSuccess { deletionTracker.recordRecurringTaskDeletion(task.id) }
                 .onFailure { e -> _state.update { it.copy(error = e.message) } }
         }
     }

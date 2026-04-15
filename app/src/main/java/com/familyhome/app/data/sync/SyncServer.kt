@@ -91,6 +91,11 @@ class SyncServer @Inject constructor(
     // ── Sync handlers ────────────────────────────────────────────────────────
 
     private suspend fun handlePull(call: ApplicationCall) {
+        // Ensure persisted deletions are loaded from DataStore before building the response.
+        // Without this, a fast sync right after app restart could send empty deletedXIds,
+        // causing members to re-insert items that were already deleted.
+        deletionTracker.awaitReady()
+
         val father = userRepository.getAllUsers().first().firstOrNull { it.role == Role.FATHER }
 
         // Build presence map: include all tracked member presence + leader's own timestamp
@@ -101,10 +106,14 @@ class SyncServer @Inject constructor(
             users                   = userRepository.getAllUsers().first().map { it.toDto() },
             stockItems              = stockRepository.getAllItems().first().map { it.toDto() },
             choreLogs               = choreRepository.getChoreHistory(0L).first().map { it.toDto() },
-            recurringTasks          = choreRepository.getRecurringTasks().first().map { it.toDto() },
+            recurringTasks          = choreRepository.getRecurringTasks().first()
+                .filter { it.id !in deletionTracker.getDeletedRecurringTaskIds() }
+                .map { it.toDto() },
             choreAssignments        = choreRepository.getAllAssignments().first().map { it.toAssignmentDto() },
             expenses                = expenseRepository.getAllExpenses().first().map { it.toDto() },
-            budgets                 = budgetRepository.getAllBudgets().first().map { it.toDto() },
+            budgets                 = budgetRepository.getAllBudgets().first()
+                .filter { it.id !in deletionTracker.getDeletedBudgetIds() }
+                .map { it.toDto() },
             customStockCategories   = customStockCategoryRepository.getAllCategories().first()
                 .map { CustomStockCategoryDto(it.id, it.name, it.iconName) },
             customExpenseCategories = customExpenseCategoryRepository.getAllCategories().first()
@@ -118,9 +127,10 @@ class SyncServer @Inject constructor(
                 ) },
             prayerLogs              = prayerRepository.getLogsSince(0L).first()
                 .map { PrayerLogDto(it.id, it.userId, it.sunnahKey, it.epochDay, it.completedCount, it.loggedAt) },
-            deletedUserIds          = deletionTracker.getDeletedUserIds().toList().ifEmpty { null },
-            deletedPrayerGoalIds    = deletionTracker.getDeletedPrayerGoalIds().toList().ifEmpty { null },
-            deletedBudgetIds        = deletionTracker.getDeletedBudgetIds().toList().ifEmpty { null },
+            deletedUserIds             = deletionTracker.getDeletedUserIds().toList().ifEmpty { null },
+            deletedPrayerGoalIds       = deletionTracker.getDeletedPrayerGoalIds().toList().ifEmpty { null },
+            deletedBudgetIds           = deletionTracker.getDeletedBudgetIds().toList().ifEmpty { null },
+            deletedRecurringTaskIds    = deletionTracker.getDeletedRecurringTaskIds().toList().ifEmpty { null },
             prayerReminders         = prayerReminderStore.getActiveReminders().ifEmpty { null },
             presenceMap             = presenceMap.ifEmpty { null },
             leaderId                = father?.id,
@@ -177,6 +187,9 @@ class SyncServer @Inject constructor(
      * deletions are the source of truth for user membership.
      */
     private suspend fun mergePayload(payload: SyncPayload) {
+        // Ensure persisted deletions are loaded before checking them, preventing
+        // a cold-start race where deleted IDs would appear empty.
+        deletionTracker.awaitReady()
         payload.users?.let { dtos ->
             val deleted = deletionTracker.getDeletedUserIds()
             val toUpsert = dtos.filter { it.id !in deleted }
@@ -184,7 +197,18 @@ class SyncServer @Inject constructor(
         }
         payload.stockItems?.let            { stockRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
         payload.choreLogs?.let             { choreRepository.upsertAllLogs(it.map { dto -> dto.toDomain() }) }
-        payload.recurringTasks?.let        { choreRepository.upsertAllRecurring(it.map { dto -> dto.toDomain() }) }
+        // Apply recurring task deletions pushed by any member before upserting
+        payload.deletedRecurringTaskIds?.let { ids ->
+            ids.forEach { id ->
+                choreRepository.deleteRecurringTask(id)
+                deletionTracker.recordRecurringTaskDeletion(id)
+            }
+        }
+        payload.recurringTasks?.let { dtos ->
+            val deletedTaskIds = deletionTracker.getDeletedRecurringTaskIds()
+            val toUpsert = dtos.filter { it.id !in deletedTaskIds }
+            if (toUpsert.isNotEmpty()) choreRepository.upsertAllRecurring(toUpsert.map { it.toDomain() })
+        }
         payload.choreAssignments?.let      { choreRepository.upsertAllAssignments(it.map { dto -> dto.toAssignmentDomain() }) }
         payload.expenses?.let              { expenseRepository.upsertAll(it.map { dto -> dto.toDomain() }) }
         payload.deletedBudgetIds?.let { ids ->
