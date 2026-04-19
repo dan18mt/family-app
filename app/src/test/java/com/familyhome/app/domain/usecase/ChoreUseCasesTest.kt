@@ -27,14 +27,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import java.security.MessageDigest
-
-private fun sha256(s: String): String =
-    MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
-
 private fun user(id: String = "u1", role: Role = Role.FATHER) = User(
     id = id, name = "Test", role = role, parentId = null,
-    avatarUri = null, pin = sha256("1234"), createdAt = 1L,
+    avatarUri = null, createdAt = 1L,
 )
 
 private fun task(

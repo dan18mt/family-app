@@ -90,6 +90,6 @@ object PermissionManager {
 
     // ── Sync ─────────────────────────────────────────────────────────────────
 
-    /** Only the host (typically Father) starts the sync server. */
-    fun canHostSync(actor: User): Boolean = actor.role == Role.FATHER
+    /** Father or Wife can host the sync server. */
+    fun canHostSync(actor: User): Boolean = actor.role == Role.FATHER || actor.role == Role.WIFE
 }

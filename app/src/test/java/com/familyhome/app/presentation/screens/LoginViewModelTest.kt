@@ -4,7 +4,7 @@ import app.cash.turbine.test
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.User
 import com.familyhome.app.domain.repository.UserRepository
-import com.familyhome.app.domain.usecase.user.ValidatePinUseCase
+import com.familyhome.app.domain.usecase.user.LoginUseCase
 import com.familyhome.app.presentation.screens.login.LoginViewModel
 import io.mockk.coEvery
 import io.mockk.every
@@ -18,32 +18,23 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.security.MessageDigest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LoginViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
-    private val userRepository  = mockk<UserRepository>()
-    private val validatePinUseCase = mockk<ValidatePinUseCase>()
-
-    private fun sha256(pin: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        return digest.digest(pin.toByteArray()).joinToString("") { "%02x".format(it) }
-    }
+    private val userRepository = mockk<UserRepository>()
+    private val loginUseCase   = mockk<LoginUseCase>()
 
     private fun makeUser(
         id: String   = "u1",
         name: String = "Ahmad",
         role: Role   = Role.FATHER,
-    ) = User(id, name, role, null, null, sha256("1234"), 1_000L)
+    ) = User(id, name, role, null, null, 1_000L)
 
     @BeforeEach
     fun setup() {
@@ -56,162 +47,57 @@ class LoginViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel() = LoginViewModel(userRepository, validatePinUseCase)
+    private fun createViewModel() = LoginViewModel(userRepository, loginUseCase)
 
     @Test
-    fun `initial state is empty`() = runTest {
+    fun `initial state is not loading and not success`() = runTest {
         val vm    = createViewModel()
         val state = vm.state.value
 
-        assertNull(state.selectedUser)
-        assertEquals("", state.pin)
         assertFalse(state.isLoading)
-        assertNull(state.error)
         assertFalse(state.isSuccess)
     }
 
     @Test
-    fun `selectUser updates state`() = runTest {
+    fun `loginAs with valid user sets isSuccess true`() = runTest {
         val vm   = createViewModel()
         val user = makeUser()
 
-        vm.selectUser(user)
+        coEvery { loginUseCase(user.id) } returns true
 
-        assertEquals(user, vm.state.value.selectedUser)
-        assertEquals("", vm.state.value.pin)
-        assertNull(vm.state.value.error)
-    }
-
-    @Test
-    fun `onPinDigit appends digit`() = runTest {
-        val vm = createViewModel()
-
-        vm.onPinDigit("1")
-        vm.onPinDigit("2")
-        vm.onPinDigit("3")
-
-        assertEquals("123", vm.state.value.pin)
-    }
-
-    @Test
-    fun `onPinDigit max 4 digits`() = runTest {
-        val vm = createViewModel()
-
-        vm.onPinDigit("1")
-        vm.onPinDigit("2")
-        vm.onPinDigit("3")
-        vm.onPinDigit("4")
-        vm.onPinDigit("5") // should be ignored
-
-        assertEquals("1234", vm.state.value.pin)
-    }
-
-    @Test
-    fun `onPinBackspace removes last digit`() = runTest {
-        val vm = createViewModel()
-
-        vm.onPinDigit("1")
-        vm.onPinDigit("2")
-        vm.onPinBackspace()
-
-        assertEquals("1", vm.state.value.pin)
-    }
-
-    @Test
-    fun `onPinBackspace on empty pin does nothing`() = runTest {
-        val vm = createViewModel()
-
-        vm.onPinBackspace() // should not crash
-
-        assertEquals("", vm.state.value.pin)
-    }
-
-    @Test
-    fun `submitPin does nothing when no user selected`() = runTest {
-        val vm = createViewModel()
-        vm.onPinDigit("1")
-        vm.onPinDigit("2")
-        vm.onPinDigit("3")
-        vm.onPinDigit("4")
-
-        vm.submitPin()
-        advanceUntilIdle()
-
-        assertFalse(vm.state.value.isSuccess)
-    }
-
-    @Test
-    fun `submitPin does nothing when pin less than 4 digits`() = runTest {
-        val vm   = createViewModel()
-        val user = makeUser()
-        vm.selectUser(user)
-        vm.onPinDigit("1")
-        vm.onPinDigit("2")
-
-        vm.submitPin()
-        advanceUntilIdle()
-
-        assertFalse(vm.state.value.isSuccess)
-    }
-
-    @Test
-    fun `submitPin with correct pin sets isSuccess true`() = runTest {
-        val vm   = createViewModel()
-        val user = makeUser()
-        vm.selectUser(user)
-        vm.onPinDigit("1")
-        vm.onPinDigit("2")
-        vm.onPinDigit("3")
-        vm.onPinDigit("4")
-
-        coEvery { validatePinUseCase(user.id, "1234") } returns true
-
-        vm.submitPin()
+        vm.loginAs(user)
         advanceUntilIdle()
 
         assertTrue(vm.state.value.isSuccess)
         assertFalse(vm.state.value.isLoading)
-        assertNull(vm.state.value.error)
     }
 
     @Test
-    fun `submitPin with wrong pin sets error and clears pin`() = runTest {
+    fun `loginAs with unknown user does not set isSuccess`() = runTest {
         val vm   = createViewModel()
         val user = makeUser()
-        vm.selectUser(user)
-        vm.onPinDigit("9")
-        vm.onPinDigit("9")
-        vm.onPinDigit("9")
-        vm.onPinDigit("9")
 
-        coEvery { validatePinUseCase(user.id, "9999") } returns false
+        coEvery { loginUseCase(user.id) } returns false
 
-        vm.submitPin()
+        vm.loginAs(user)
         advanceUntilIdle()
 
         assertFalse(vm.state.value.isSuccess)
-        assertNotNull(vm.state.value.error)
-        assertTrue(vm.state.value.error?.contains("Incorrect") == true)
-        assertEquals("", vm.state.value.pin) // pin is cleared on failure
+        assertFalse(vm.state.value.isLoading)
     }
 
     @Test
-    fun `state emits loading while validating pin`() = runTest {
+    fun `state emits loading while login is in progress`() = runTest {
         val vm   = createViewModel()
         val user = makeUser()
-        vm.selectUser(user)
-        vm.onPinDigit("1")
-        vm.onPinDigit("2")
-        vm.onPinDigit("3")
-        vm.onPinDigit("4")
 
-        coEvery { validatePinUseCase(user.id, "1234") } returns true
+        coEvery { loginUseCase(user.id) } returns true
 
         vm.state.test {
             val initial = awaitItem()
             assertFalse(initial.isLoading)
 
-            vm.submitPin()
+            vm.loginAs(user)
 
             val loading = awaitItem()
             assertTrue(loading.isLoading)
@@ -232,36 +118,15 @@ class LoginViewModelTest {
         val vm = createViewModel()
 
         vm.users.test {
-            // Skip initial empty state
             val first = awaitItem()
             if (first.isEmpty()) {
                 advanceUntilIdle()
                 val second = awaitItem()
-                assertEquals(users, second)
+                assert(second == users)
             } else {
-                assertEquals(users, first)
+                assert(first == users)
             }
             cancelAndIgnoreRemainingEvents()
         }
-    }
-
-    @Test
-    fun `selecting user clears previous error`() = runTest {
-        val vm   = createViewModel()
-        val user = makeUser()
-
-        // Force an error state by manually selecting and failing
-        vm.selectUser(user)
-        vm.onPinDigit("9"); vm.onPinDigit("9"); vm.onPinDigit("9"); vm.onPinDigit("9")
-        coEvery { validatePinUseCase(user.id, "9999") } returns false
-        vm.submitPin()
-        advanceUntilIdle()
-
-        assertNotNull(vm.state.value.error)
-
-        // Now select a different user — error must be cleared
-        vm.selectUser(makeUser("u2", "Siti", Role.WIFE))
-
-        assertNull(vm.state.value.error)
     }
 }

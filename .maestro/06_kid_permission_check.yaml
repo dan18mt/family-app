@@ -1,0 +1,35 @@
+appId: com.familyhome.app
+---
+# Kid Role Permission Documentation
+#
+# This flow documents expected behavior for the Kid role.
+# Kids have restricted access — they can only act on their own data.
+#
+# EXPECTED BEHAVIOR:
+#   - Kid CANNOT add stock items: the + (FAB) button is NOT visible on the Pantry screen
+#   - Kid CANNOT add expenses: the + (FAB) button is NOT visible on the Budget screen
+#   - Kid CAN log chores for themselves only (own assignments show up, others' do not)
+#
+# These restrictions are enforced via PermissionManager in the domain layer,
+# which hides add/delete buttons in ViewModels when the actor is Role.KID.
+#
+# Assume app is already launched and logged in as a Kid user
+- launchApp
+
+# Navigate to Pantry — Kid should see items but no + button
+- tapOn:
+    text: "Pantry"
+- assertNotVisible:
+    id: "add_stock_item_fab"
+
+# Navigate to Budget — Kid should see their own expenses but no + button
+- tapOn:
+    text: "Budget"
+- assertNotVisible:
+    id: "add_expense_fab"
+
+# Navigate to Chores — Kid can see and log their own assigned chores
+- tapOn:
+    text: "Chores"
+- assertVisible: "Chores"
+# Kid can log a chore for themselves if they have an assignment

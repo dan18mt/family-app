@@ -1,0 +1,34 @@
+appId: com.familyhome.app
+---
+# Assume app is already launched and logged in as Father or Wife
+- launchApp
+
+# Navigate to Expenses/Budget screen via bottom navigation
+- tapOn:
+    text: "Budget"
+
+# Assert we're on the expenses screen
+- assertVisible: "Budget"
+
+# Tap + button to add an expense
+- tapOn:
+    id: "add_expense_fab"
+
+# Enter amount
+- tapOn:
+    text: "Amount"
+- inputText: "50000"
+
+# Enter description
+- tapOn:
+    text: "Description"
+- inputText: "Weekly groceries"
+
+# Select Groceries category
+- tapOn: "Groceries"
+
+# Save the expense
+- tapOn: "Save"
+
+# Assert expense appears in list
+- assertVisible: "Weekly groceries"

@@ -1,0 +1,24 @@
+appId: com.familyhome.app
+---
+- launchApp:
+    clearState: true
+
+# Expect setup/welcome screen
+- assertVisible: "Create a Family"
+
+# Choose to create a family
+- tapOn: "Create a Family"
+
+# Expect leader profile screen
+- assertVisible: "Leader Profile"
+
+# Enter father name
+- tapOn:
+    text: "Your name"
+- inputText: "Ahmad"
+
+# Tap Create Family
+- tapOn: "Create Family"
+
+# Assert home screen is visible
+- assertVisible: "FamilyHome"

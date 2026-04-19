@@ -37,7 +37,7 @@ data class SyncPayload(
 @Serializable data class UserDto(
     val id: String, val name: String, val role: String,
     val parentId: String?, val avatarUri: String?,
-    val pin: String, val createdAt: Long,
+    val createdAt: Long,
 )
 
 @Serializable data class StockItemDto(

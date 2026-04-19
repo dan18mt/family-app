@@ -331,7 +331,6 @@ class SyncServer @Inject constructor(
             role      = role,
             parentId  = fatherId,
             avatarUri = request.avatarUri,
-            pin       = request.pinHash,
             createdAt = System.currentTimeMillis(),
         )
         userRepository.insertUser(newUser)

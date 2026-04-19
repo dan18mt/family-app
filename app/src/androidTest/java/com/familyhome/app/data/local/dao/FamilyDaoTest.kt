@@ -167,7 +167,7 @@ class FamilyDaoTest {
     private fun userEntity(id: String, role: String) = UserEntity(
         id = id, name = "Test $id", role = role,
         parentId = null, avatarUri = null,
-        pin = "hashed_pin", createdAt = System.currentTimeMillis(),
+        createdAt = System.currentTimeMillis(),
     )
 
     private fun expenseEntity(

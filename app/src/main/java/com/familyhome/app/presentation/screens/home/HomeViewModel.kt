@@ -23,6 +23,7 @@ import com.familyhome.app.data.sync.SyncServer
 import com.familyhome.app.domain.model.AppLanguage
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.StockItem
+import com.familyhome.app.domain.permission.PermissionManager
 import com.familyhome.app.domain.model.SyncResult
 import com.familyhome.app.domain.model.User
 import com.familyhome.app.domain.usecase.expense.CheckBudgetAlertUseCase
@@ -166,7 +167,7 @@ class HomeViewModel @Inject constructor(
     private fun startNsdForRole() {
         viewModelScope.launch {
             val user = getCurrentUserUseCase() ?: return@launch
-            if (user.role == Role.FATHER) {
+            if (PermissionManager.canHostSync(user)) {
                 syncRepository.startHostServer()
                 nsdHelper.startAdvertising("FamilyHome_Host", 8765, NsdHelper.FATHER_SERVICE_TYPE)
             } else {

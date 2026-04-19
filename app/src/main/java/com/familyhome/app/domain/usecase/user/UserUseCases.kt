@@ -7,7 +7,6 @@ import com.familyhome.app.domain.repository.SessionRepository
 import com.familyhome.app.domain.repository.UserRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import java.security.MessageDigest
 import java.util.UUID
 import javax.inject.Inject
 
@@ -41,7 +40,6 @@ class CreateUserUseCase @Inject constructor(
     suspend operator fun invoke(
         name: String,
         role: Role,
-        pin: String,
         avatarUri: String?,
         parentId: String?,
         actor: User?,
@@ -65,7 +63,6 @@ class CreateUserUseCase @Inject constructor(
             role      = if (existingUsers.isEmpty()) Role.FATHER else role,
             parentId  = parentId,
             avatarUri = avatarUri,
-            pin       = hashPin(pin),
             createdAt = System.currentTimeMillis(),
         )
 
@@ -78,31 +75,16 @@ class CreateUserUseCase @Inject constructor(
 
         return Result.success(newUser)
     }
-
-    private fun hashPin(pin: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        return digest.digest(pin.toByteArray()).joinToString("") { "%02x".format(it) }
-    }
 }
 
-class ValidatePinUseCase @Inject constructor(
+class LoginUseCase @Inject constructor(
     private val userRepository: UserRepository,
     private val sessionRepository: SessionRepository,
 ) {
-    suspend operator fun invoke(userId: String, pin: String): Boolean {
+    suspend operator fun invoke(userId: String): Boolean {
         val user = userRepository.getUserById(userId) ?: return false
-        val hashed = hashPin(pin)
-        return if (user.pin == hashed) {
-            sessionRepository.setCurrentUserId(userId)
-            true
-        } else {
-            false
-        }
-    }
-
-    private fun hashPin(pin: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        return digest.digest(pin.toByteArray()).joinToString("") { "%02x".format(it) }
+        sessionRepository.setCurrentUserId(user.id)
+        return true
     }
 }
 

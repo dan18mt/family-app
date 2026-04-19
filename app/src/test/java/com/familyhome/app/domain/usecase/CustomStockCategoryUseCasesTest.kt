@@ -23,9 +23,9 @@ class CustomStockCategoryUseCasesTest {
 
     private val repository = mockk<CustomStockCategoryRepository>(relaxed = true)
 
-    private fun makeFather() = User("f1", "Ahmad", Role.FATHER, null, null, "hash", 0L)
-    private fun makeWife()   = User("w1", "Siti",  Role.WIFE,   null, null, "hash", 0L)
-    private fun makeKid()    = User("k1", "Budi",  Role.KID,    "f1", null, "hash", 0L)
+    private fun makeFather() = User("f1", "Ahmad", Role.FATHER, null, null, 0L)
+    private fun makeWife()   = User("w1", "Siti",  Role.WIFE,   null, null, 0L)
+    private fun makeKid()    = User("k1", "Budi",  Role.KID,    "f1", null, 0L)
 
     private fun makeCategory(id: String = "sc1") =
         CustomStockCategory(id, "Snacks", "Cookie")

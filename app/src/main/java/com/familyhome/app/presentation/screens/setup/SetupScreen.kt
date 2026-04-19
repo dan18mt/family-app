@@ -12,14 +12,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -192,49 +188,11 @@ private fun LeaderSetupStep(
                 modifier      = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.Words,
-                    imeAction      = ImeAction.Next,
-                ),
-                keyboardActions = KeyboardActions(
-                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                ),
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value                = state.pin,
-                onValueChange        = { if (it.length <= 4 && it.all(Char::isDigit)) viewModel.onPinChange(it) },
-                label                = { Text("4-digit PIN") },
-                singleLine           = true,
-                shape                = RoundedCornerShape(12.dp),
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions      = KeyboardOptions(
-                    keyboardType = KeyboardType.NumberPassword,
-                    imeAction    = ImeAction.Next,
-                ),
-                keyboardActions = KeyboardActions(
-                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value                = state.confirmPin,
-                onValueChange        = { if (it.length <= 4 && it.all(Char::isDigit)) viewModel.onConfirmPinChange(it) },
-                label                = { Text("Confirm PIN") },
-                singleLine           = true,
-                shape                = RoundedCornerShape(12.dp),
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions      = KeyboardOptions(
-                    keyboardType = KeyboardType.NumberPassword,
-                    imeAction    = ImeAction.Done,
+                    imeAction      = ImeAction.Done,
                 ),
                 keyboardActions = KeyboardActions(
                     onDone = { focusManager.clearFocus(); viewModel.createFather() }
                 ),
-                modifier = Modifier.fillMaxWidth(),
             )
 
             if (state.error != null) {

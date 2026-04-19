@@ -14,20 +14,16 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.*
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
-import java.security.MessageDigest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
 
-    private fun sha256(s: String) = MessageDigest.getInstance("SHA-256")
-        .digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
-
     private fun fatherUser() = User(
         id = "f1", name = "Father", role = Role.FATHER,
         parentId = null, avatarUri = null,
-        pin = sha256("1234"), createdAt = 1L,
+        createdAt = 1L,
     )
 
     @BeforeEach fun setup() { Dispatchers.setMain(testDispatcher) }
@@ -36,7 +32,7 @@ class HomeViewModelTest {
     @Test
     fun `GetFamilyMembersUseCase returns all users`() = runTest {
         val useCase = mockk<GetFamilyMembersUseCase>()
-        val wife = User("w1", "Wife", Role.WIFE, "f1", null, sha256("5678"), 2L)
+        val wife = User("w1", "Wife", Role.WIFE, "f1", null, 2L)
         every { useCase() } returns flowOf(listOf(fatherUser(), wife))
 
         useCase().test {

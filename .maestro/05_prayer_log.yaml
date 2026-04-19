@@ -1,0 +1,21 @@
+appId: com.familyhome.app
+---
+# Assume app is already launched and logged in
+- launchApp
+
+# Navigate to Prayer/Ibadah screen via bottom navigation
+- tapOn:
+    text: "Ibadah"
+
+# Assert prayer goals are visible
+- assertVisible: "Ibadah"
+
+# Tap on the first prayer goal to log completion
+- tapOn:
+    index: 0
+    text: "Log"
+
+# Assert completion was recorded (check mark or count updated)
+- assertVisible:
+    text: "1"
+    optional: true

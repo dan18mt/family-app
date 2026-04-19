@@ -7,8 +7,6 @@ data class User(
     /** null for Father; points to father's id for Wife; points to father/mother id for Kid */
     val parentId: String?,
     val avatarUri: String?,
-    /** SHA-256 hash of the 4-digit PIN */
-    val pin: String,
     val createdAt: Long,
 )
 

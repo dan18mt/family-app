@@ -8,8 +8,8 @@ import com.familyhome.app.domain.usecase.user.CreateUserUseCase
 import com.familyhome.app.domain.usecase.user.DeleteFamilyMemberUseCase
 import com.familyhome.app.domain.usecase.user.GetCurrentUserUseCase
 import com.familyhome.app.domain.usecase.user.GetFamilyMembersUseCase
+import com.familyhome.app.domain.usecase.user.LoginUseCase
 import com.familyhome.app.domain.usecase.user.UpdateProfileUseCase
-import com.familyhome.app.domain.usecase.user.ValidatePinUseCase
 import io.mockk.coEvery
 import io.mockk.coJustRun
 import io.mockk.coVerify
@@ -34,25 +34,20 @@ class UserUseCasesTest {
     private fun fatherUser(id: String = "father-1") = User(
         id = id, name = "Father", role = Role.FATHER,
         parentId = null, avatarUri = null,
-        pin = sha256("1234"), createdAt = 1_000L,
+        createdAt = 1_000L,
     )
 
     private fun wifeUser(id: String = "wife-1") = User(
         id = id, name = "Wife", role = Role.WIFE,
         parentId = "father-1", avatarUri = null,
-        pin = sha256("5678"), createdAt = 2_000L,
+        createdAt = 2_000L,
     )
 
     private fun kidUser(id: String = "kid-1") = User(
         id = id, name = "Kid", role = Role.KID,
         parentId = "father-1", avatarUri = null,
-        pin = sha256("9999"), createdAt = 3_000L,
+        createdAt = 3_000L,
     )
-
-    private fun sha256(pin: String): String {
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
-        return digest.digest(pin.toByteArray()).joinToString("") { "%02x".format(it) }
-    }
 
     @Nested
     inner class GetCurrentUserUseCaseTest {
@@ -114,7 +109,7 @@ class UserUseCasesTest {
             coJustRun { userRepository.insertUser(any()) }
             coJustRun { sessionRepository.setCurrentUserId(any()) }
 
-            val result = useCase("Alice", Role.KID, "1234", null, null, null)
+            val result = useCase("Alice", Role.KID, null, null, null)
 
             assertTrue(result.isSuccess)
             assertEquals(Role.FATHER, result.getOrThrow().role)
@@ -127,7 +122,7 @@ class UserUseCasesTest {
             val idSlot = slot<String>()
             coEvery { sessionRepository.setCurrentUserId(capture(idSlot)) } returns Unit
 
-            val result = useCase("Alice", Role.FATHER, "1234", null, null, null)
+            val result = useCase("Alice", Role.FATHER, null, null, null)
 
             assertTrue(result.isSuccess)
             assertEquals(result.getOrThrow().id, idSlot.captured)
@@ -139,7 +134,7 @@ class UserUseCasesTest {
             every { userRepository.getAllUsers() } returns flowOf(listOf(father))
             coJustRun { userRepository.insertUser(any()) }
 
-            val result = useCase("NewKid", Role.KID, "1111", null, father.id, father)
+            val result = useCase("NewKid", Role.KID, null, father.id, father)
 
             assertTrue(result.isSuccess)
             assertEquals(Role.KID, result.getOrThrow().role)
@@ -151,7 +146,7 @@ class UserUseCasesTest {
             val father = fatherUser()
             every { userRepository.getAllUsers() } returns flowOf(listOf(father, wife))
 
-            val result = useCase("NewKid", Role.KID, "1111", null, father.id, wife)
+            val result = useCase("NewKid", Role.KID, null, father.id, wife)
 
             assertTrue(result.isFailure)
             assertTrue(result.exceptionOrNull()?.message?.contains("Father") == true)
@@ -162,59 +157,38 @@ class UserUseCasesTest {
             val father = fatherUser()
             every { userRepository.getAllUsers() } returns flowOf(listOf(father))
 
-            val result = useCase("Father", Role.WIFE, "5678", null, null, father)
+            val result = useCase("Father", Role.WIFE, null, null, father)
 
             assertTrue(result.isFailure)
             assertTrue(result.exceptionOrNull()?.message?.contains("already exists") == true)
         }
-
-        @Test
-        fun `pin is stored as SHA-256 hash`() = runTest {
-            every { userRepository.getAllUsers() } returns flowOf(emptyList())
-            coJustRun { userRepository.insertUser(any()) }
-            coJustRun { sessionRepository.setCurrentUserId(any()) }
-
-            val result = useCase("User", Role.FATHER, "9876", null, null, null)
-
-            assertTrue(result.isSuccess)
-            assertEquals(sha256("9876"), result.getOrThrow().pin)
-        }
     }
 
     @Nested
-    inner class ValidatePinUseCaseTest {
-        private lateinit var useCase: ValidatePinUseCase
+    inner class LoginUseCaseTest {
+        private lateinit var useCase: LoginUseCase
 
         @BeforeEach
-        fun setup() { useCase = ValidatePinUseCase(userRepository, sessionRepository) }
+        fun setup() { useCase = LoginUseCase(userRepository, sessionRepository) }
 
         @Test
-        fun `correct pin validates and sets session`() = runTest {
+        fun `login with valid userId sets session and returns true`() = runTest {
             val father = fatherUser()
             coEvery { userRepository.getUserById(father.id) } returns father
             coJustRun { sessionRepository.setCurrentUserId(father.id) }
 
-            val result = useCase(father.id, "1234")
+            val result = useCase(father.id)
 
             assertTrue(result)
             coVerify { sessionRepository.setCurrentUserId(father.id) }
         }
 
         @Test
-        fun `wrong pin returns false without setting session`() = runTest {
-            val father = fatherUser()
-            coEvery { userRepository.getUserById(father.id) } returns father
-
-            val result = useCase(father.id, "0000")
-
-            assertFalse(result)
-            coVerify(exactly = 0) { sessionRepository.setCurrentUserId(any()) }
-        }
-
-        @Test
-        fun `unknown user returns false`() = runTest {
+        fun `login with unknown userId returns false`() = runTest {
             coEvery { userRepository.getUserById("ghost") } returns null
-            assertFalse(useCase("ghost", "1234"))
+
+            assertFalse(useCase("ghost"))
+            coVerify(exactly = 0) { sessionRepository.setCurrentUserId(any()) }
         }
     }
 

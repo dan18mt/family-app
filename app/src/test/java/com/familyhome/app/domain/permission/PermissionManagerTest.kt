@@ -1,6 +1,5 @@
 package com.familyhome.app.domain.permission
 
-import com.familyhome.app.domain.model.Expense
 import com.familyhome.app.domain.model.ExpenseCategory
 import com.familyhome.app.domain.model.Role
 import com.familyhome.app.domain.model.User
@@ -12,13 +11,13 @@ import org.junit.jupiter.api.Test
 class PermissionManagerTest {
 
     private fun father(id: String = "f1") =
-        User(id, "Ahmad", Role.FATHER, null, null, "hash", 0L)
+        User(id, "Ahmad", Role.FATHER, null, null, 0L)
 
     private fun wife(id: String = "w1") =
-        User(id, "Siti", Role.WIFE, null, null, "hash", 0L)
+        User(id, "Siti", Role.WIFE, null, null, 0L)
 
     private fun kid(id: String = "k1") =
-        User(id, "Budi", Role.KID, "f1", null, "hash", 0L)
+        User(id, "Budi", Role.KID, "f1", null, 0L)
 
     // ── Family Management ─────────────────────────────────────────────────────────
 
@@ -143,7 +142,6 @@ class PermissionManagerTest {
             val wife    = wife("w1")
             val father2 = father("f2")
             val users   = listOf(wife, father2)
-            // father2 is not a KID, so wife cannot see
             assertFalse(PermissionManager.canViewExpense(wife, "f2", users))
         }
 
@@ -219,9 +217,9 @@ class PermissionManagerTest {
     inner class SyncPermissionsTest {
 
         @Test
-        fun `only FATHER can host sync`() {
+        fun `FATHER and WIFE can host sync`() {
             assertTrue(PermissionManager.canHostSync(father()))
-            assertFalse(PermissionManager.canHostSync(wife()))
+            assertTrue(PermissionManager.canHostSync(wife()))
             assertFalse(PermissionManager.canHostSync(kid()))
         }
     }

@@ -27,6 +27,26 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
+    private val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Remove the pin column by recreating the users table without it
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `users_new` (
+                    `id` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `role` TEXT NOT NULL,
+                    `parentId` TEXT,
+                    `avatarUri` TEXT,
+                    `createdAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+            """.trimIndent())
+            db.execSQL("INSERT INTO users_new SELECT id, name, role, parentId, avatarUri, createdAt FROM users")
+            db.execSQL("DROP TABLE users")
+            db.execSQL("ALTER TABLE users_new RENAME TO users")
+        }
+    }
+
     private val MIGRATION_4_5 = object : Migration(4, 5) {
         override fun migrate(db: SupportSQLiteDatabase) {
             // Add reminderEnabled column; default 0 (false) preserves existing data
@@ -69,7 +89,7 @@ object DatabaseModule {
     fun provideDatabase(@ApplicationContext context: Context): FamilyDatabase =
         Room.databaseBuilder(context, FamilyDatabase::class.java, FamilyDatabase.DATABASE_NAME)
             .fallbackToDestructiveMigrationFrom(1, 2)
-            .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
             .build()
 
     @Provides fun provideUserDao(db: FamilyDatabase):                       UserDao                    = db.userDao()

@@ -1,0 +1,26 @@
+appId: com.familyhome.app
+---
+# Assume app is already launched and logged in
+- launchApp
+
+# Navigate to Chores screen via bottom navigation
+- tapOn:
+    text: "Chores"
+
+# Assert we're on the chores screen
+- assertVisible: "Chores"
+
+# Tap + button to log a chore
+- tapOn:
+    id: "add_chore_fab"
+
+# Enter task name
+- tapOn:
+    text: "Task name"
+- inputText: "Wash dishes"
+
+# Tap Log to save
+- tapOn: "Log"
+
+# Assert "Wash dishes" appears in history
+- assertVisible: "Wash dishes"

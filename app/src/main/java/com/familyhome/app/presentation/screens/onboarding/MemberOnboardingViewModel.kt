@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.net.Inet4Address
 import java.net.NetworkInterface
-import java.security.MessageDigest
 import java.util.Collections
 import java.util.UUID
 import javax.inject.Inject
@@ -41,8 +40,6 @@ data class MemberOnboardingUiState(
     val invite: InviteDto?         = null,
     // Profile form
     val name: String               = "",
-    val pin: String                = "",
-    val confirmPin: String         = "",
     val error: String?             = null,
     val isLoading: Boolean         = false,
     val knockSent: Boolean         = false,
@@ -132,9 +129,7 @@ class MemberOnboardingViewModel @Inject constructor(
         _state.update { it.copy(step = MemberOnboardingStep.Scanning, invite = null) }
     }
 
-    fun onNameChange(value: String)       = _state.update { it.copy(name = value, error = null) }
-    fun onPinChange(value: String)        = _state.update { it.copy(pin = value, error = null) }
-    fun onConfirmPinChange(value: String) = _state.update { it.copy(confirmPin = value, error = null) }
+    fun onNameChange(value: String) = _state.update { it.copy(name = value, error = null) }
 
     fun submitProfile() {
         val s = _state.value
@@ -142,14 +137,6 @@ class MemberOnboardingViewModel @Inject constructor(
 
         if (s.name.isBlank()) {
             _state.update { it.copy(error = "Name cannot be empty.") }
-            return
-        }
-        if (s.pin.length != 4) {
-            _state.update { it.copy(error = "PIN must be 4 digits.") }
-            return
-        }
-        if (s.pin != s.confirmPin) {
-            _state.update { it.copy(error = "PINs do not match.") }
             return
         }
 
@@ -160,7 +147,6 @@ class MemberOnboardingViewModel @Inject constructor(
                 deviceId   = deviceId,
                 deviceName = Build.MODEL,
                 name       = s.name,
-                pinHash    = hashPin(s.pin),
             )
 
             val submitted = onboardingClient.submitJoinRequest(
@@ -220,10 +206,5 @@ class MemberOnboardingViewModel @Inject constructor(
         super.onCleared()
         nsdHelper.stopAll()
         onboardingServer.stop()
-    }
-
-    private fun hashPin(pin: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        return digest.digest(pin.toByteArray()).joinToString("") { "%02x".format(it) }
     }
 }

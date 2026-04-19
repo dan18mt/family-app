@@ -8,8 +8,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -155,33 +155,15 @@ private fun FillProfileStep(
         Spacer(Modifier.height(32.dp))
 
         OutlinedTextField(
-            value         = state.name,
-            onValueChange = viewModel::onNameChange,
-            label         = { Text("Your name") },
-            singleLine    = true,
-            modifier      = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value                = state.pin,
-            onValueChange        = { if (it.length <= 4 && it.all(Char::isDigit)) viewModel.onPinChange(it) },
-            label                = { Text("4-digit PIN") },
-            singleLine           = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions      = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            modifier             = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value                = state.confirmPin,
-            onValueChange        = { if (it.length <= 4 && it.all(Char::isDigit)) viewModel.onConfirmPinChange(it) },
-            label                = { Text("Confirm PIN") },
-            singleLine           = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions      = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            modifier             = Modifier.fillMaxWidth(),
+            value           = state.name,
+            onValueChange   = viewModel::onNameChange,
+            label           = { Text("Your name") },
+            singleLine      = true,
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.Words,
+                imeAction      = ImeAction.Done,
+            ),
+            modifier        = Modifier.fillMaxWidth(),
         )
 
         if (state.error != null) {

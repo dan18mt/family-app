@@ -14,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -188,36 +187,6 @@ fun SectionHeader(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         action?.invoke()
-    }
-}
-
-// ── PIN dots ──────────────────────────────────────────────────────────────────
-
-@Composable
-fun PinDots(enteredLength: Int, modifier: Modifier = Modifier) {
-    Row(
-        modifier              = modifier,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment     = Alignment.CenterVertically,
-    ) {
-        repeat(4) { index ->
-            val filled = index < enteredLength
-            val scale by animateFloatAsState(
-                targetValue = if (filled) 1.15f else 1f,
-                animationSpec = tween(150),
-                label = "pin_dot_scale",
-            )
-            Box(
-                modifier = Modifier
-                    .scale(scale)
-                    .size(16.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (filled) MaterialTheme.colorScheme.primary
-                        else        MaterialTheme.colorScheme.surfaceVariant,
-                    )
-            )
-        }
     }
 }
 

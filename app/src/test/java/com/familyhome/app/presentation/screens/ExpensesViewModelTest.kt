@@ -13,26 +13,22 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.*
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
-import java.security.MessageDigest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ExpensesViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
 
-    private fun sha256(s: String) = MessageDigest.getInstance("SHA-256")
-        .digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
-
     private fun fatherUser() = User(
         id = "f1", name = "Father", role = Role.FATHER,
         parentId = null, avatarUri = null,
-        pin = sha256("1234"), createdAt = 1L,
+        createdAt = 1L,
     )
 
     private fun kidUser() = User(
         id = "k1", name = "Kid", role = Role.KID,
         parentId = "f1", avatarUri = null,
-        pin = sha256("0000"), createdAt = 3L,
+        createdAt = 3L,
     )
 
     private fun expense(id: String, amount: Long, category: ExpenseCategory) = Expense(

@@ -1,11 +1,3 @@
-import java.util.Properties
-
-// Read local.properties for secrets — never commit that file
-val localProperties = Properties().apply {
-    val file = rootProject.file("local.properties")
-    if (file.exists()) load(file.inputStream())
-}
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -28,13 +20,6 @@ android {
         versionCode             = 2
         versionName             = "1.1.0"
         testInstrumentationRunner = "com.familyhome.app.HiltTestRunner"
-
-        // Anthropic API key injected at build time from local.properties
-        buildConfigField(
-            "String",
-            "ANTHROPIC_API_KEY",
-            "\"${localProperties.getProperty("ANTHROPIC_API_KEY", "")}\""
-        )
 
         // Sync server default port
         buildConfigField("int", "SYNC_SERVER_PORT", "8765")
@@ -229,11 +214,6 @@ dependencies {
 
     // ---------- Shared Ktor serialization ----------
     implementation(libs.ktor.serialization.kotlinx.json)
-
-    // ---------- Retrofit (Claude API) ----------
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.kotlinx.serialization)
-    implementation(libs.okhttp.logging)
 
     // ---------- Serialization ----------
     implementation(libs.kotlinx.serialization.json)

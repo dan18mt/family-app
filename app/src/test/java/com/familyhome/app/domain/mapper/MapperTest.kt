@@ -35,7 +35,7 @@ class MapperTest {
         val entity = UserEntity(
             id = "u-1", name = "Alice", role = "FATHER",
             parentId = null, avatarUri = "file://avatar.jpg",
-            pin = "hashvalue", createdAt = 1_000L,
+            createdAt = 1_000L,
         )
         val domain = entity.toDomain()
         assertEquals("u-1", domain.id)
@@ -43,7 +43,6 @@ class MapperTest {
         assertEquals(Role.FATHER, domain.role)
         assertNull(domain.parentId)
         assertEquals("file://avatar.jpg", domain.avatarUri)
-        assertEquals("hashvalue", domain.pin)
         assertEquals(1_000L, domain.createdAt)
 
         // Round-trip back to entity
@@ -53,7 +52,7 @@ class MapperTest {
 
     @Test
     fun `User toDto round-trip`() {
-        val entity = UserEntity("u-2", "Bob", "KID", "u-1", null, "hash", 2_000L)
+        val entity = UserEntity("u-2", "Bob", "KID", "u-1", null, 2_000L)
         val domain = entity.toDomain()
         val dto = domain.toDto()
         assertEquals("u-2", dto.id)

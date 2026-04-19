@@ -1,0 +1,41 @@
+appId: com.familyhome.app
+---
+# Assume app is already launched and logged in as Father
+- launchApp
+
+# Navigate to Stock/Pantry screen via bottom navigation
+- tapOn:
+    text: "Pantry"
+
+# Assert we're on the stock screen
+- assertVisible: "Pantry"
+
+# Tap add button (FAB)
+- tapOn:
+    id: "add_stock_item_fab"
+
+# Fill in item name
+- tapOn:
+    text: "Item name"
+- inputText: "Rice"
+
+# Fill in quantity
+- tapOn:
+    text: "Quantity"
+- inputText: "5"
+
+# Fill in unit
+- tapOn:
+    text: "Unit"
+- inputText: "kg"
+
+# Fill in min quantity
+- tapOn:
+    text: "Min quantity"
+- inputText: "2"
+
+# Save the item
+- tapOn: "Save"
+
+# Assert Rice appears in the list
+- assertVisible: "Rice"

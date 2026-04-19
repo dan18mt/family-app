@@ -31,8 +31,6 @@ data class JoinRequestDto(
     val deviceId: String,
     val deviceName: String,
     val name: String,
-    /** SHA-256 hash of the member's chosen PIN, computed on the member device */
-    val pinHash: String,
     val avatarUri: String? = null,
 )
 

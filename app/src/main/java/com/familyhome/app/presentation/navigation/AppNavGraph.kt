@@ -17,7 +17,6 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.familyhome.app.presentation.components.FamilyBottomBar
-import com.familyhome.app.presentation.screens.chat.ChatScreen
 import com.familyhome.app.presentation.screens.chores.ChoresScreen
 import com.familyhome.app.presentation.screens.expenses.ExpensesScreen
 import com.familyhome.app.presentation.screens.home.HomeScreen
@@ -142,9 +141,6 @@ fun AppNavGraph(
             NotificationsScreen(onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.Chat.route) {
-            ChatScreen()
-        }
     }
 }
 

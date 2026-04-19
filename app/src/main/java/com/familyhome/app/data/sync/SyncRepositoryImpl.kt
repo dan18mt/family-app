@@ -83,13 +83,13 @@ class SyncRepositoryImpl @Inject constructor(
         deletionTracker.awaitReady()
 
         return runCatching {
-            // 1. Push local snapshot to host (excluding locally-tracked deleted users)
-            val localPayload = buildLocalPayload()
-            syncClient.push(ip, syncPort, localPayload)
-
-            // 2. Pull host snapshot and merge into local DB
+            // 1. Pull host snapshot first to get the latest state before pushing
             val remotePayload = syncClient.pull(ip, syncPort)
             mergeRemotePayload(remotePayload)
+
+            // 2. Push local snapshot to host after merging remote data
+            val localPayload = buildLocalPayload()
+            syncClient.push(ip, syncPort, localPayload)
 
             val now = System.currentTimeMillis()
             context.dataStore.edit { it[lastSyncKey] = now }

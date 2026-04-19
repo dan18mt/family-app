@@ -10,6 +10,5 @@ data class UserEntity(
     val role: String,
     val parentId: String?,
     val avatarUri: String?,
-    val pin: String,
     val createdAt: Long,
 )

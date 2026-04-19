@@ -44,13 +44,13 @@ class MapperTest {
         private val entity = UserEntity(
             id = "u1", name = "Ahmad", role = "FATHER",
             parentId = null, avatarUri = "uri://avatar",
-            pin = "hashedpin", createdAt = 1000L,
+            createdAt = 1000L,
         )
 
         private val domain = User(
             id = "u1", name = "Ahmad", role = Role.FATHER,
             parentId = null, avatarUri = "uri://avatar",
-            pin = "hashedpin", createdAt = 1000L,
+            createdAt = 1000L,
         )
 
         @Test
@@ -78,7 +78,7 @@ class MapperTest {
 
         @Test
         fun `UserDto toDomain parses role enum`() {
-            val dto    = UserDto("u1", "Ahmad", "WIFE", null, null, "hash", 2000L)
+            val dto    = UserDto("u1", "Ahmad", "WIFE", null, null, 2000L)
             val result = dto.toDomain()
             assertEquals(Role.WIFE, result.role)
         }

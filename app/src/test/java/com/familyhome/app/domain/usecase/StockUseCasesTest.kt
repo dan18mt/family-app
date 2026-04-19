@@ -33,17 +33,17 @@ class StockUseCasesTest {
 
     private fun fatherUser() = User(
         id = "father-1", name = "Father", role = Role.FATHER,
-        parentId = null, avatarUri = null, pin = "hash", createdAt = 1_000L,
+        parentId = null, avatarUri = null, createdAt = 1_000L,
     )
 
     private fun wifeUser() = User(
         id = "wife-1", name = "Wife", role = Role.WIFE,
-        parentId = "father-1", avatarUri = null, pin = "hash", createdAt = 2_000L,
+        parentId = "father-1", avatarUri = null, createdAt = 2_000L,
     )
 
     private fun kidUser() = User(
         id = "kid-1", name = "Kid", role = Role.KID,
-        parentId = "father-1", avatarUri = null, pin = "hash", createdAt = 3_000L,
+        parentId = "father-1", avatarUri = null, createdAt = 3_000L,
     )
 
     private fun stockItem(id: String = "item-1", quantity: Float = 5f, minQuantity: Float = 2f) = StockItem(

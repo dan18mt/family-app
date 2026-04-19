@@ -11,7 +11,6 @@ fun UserEntity.toDomain() = User(
     role      = Role.valueOf(role),
     parentId  = parentId,
     avatarUri = avatarUri,
-    pin       = pin,
     createdAt = createdAt,
 )
 
@@ -21,7 +20,6 @@ fun User.toEntity() = UserEntity(
     role      = role.name,
     parentId  = parentId,
     avatarUri = avatarUri,
-    pin       = pin,
     createdAt = createdAt,
 )
 
@@ -31,7 +29,6 @@ fun User.toDto() = UserDto(
     role      = role.name,
     parentId  = parentId,
     avatarUri = avatarUri,
-    pin       = pin,
     createdAt = createdAt,
 )
 
@@ -41,6 +38,5 @@ fun UserDto.toDomain() = User(
     role      = Role.valueOf(role),
     parentId  = parentId,
     avatarUri = avatarUri,
-    pin       = pin,
     createdAt = createdAt,
 )
