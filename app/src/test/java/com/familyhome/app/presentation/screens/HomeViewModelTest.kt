@@ -3,9 +3,9 @@ package com.familyhome.app.presentation.screens
 import app.cash.turbine.test
 import com.familyhome.app.domain.model.*
 import com.familyhome.app.domain.usecase.chore.GetRecurringTasksUseCase
-import com.familyhome.app.domain.usecase.expense.ExpenseUseCases
-import com.familyhome.app.domain.usecase.stock.StockUseCases
-import com.familyhome.app.domain.usecase.user.UserUseCases
+import com.familyhome.app.domain.usecase.expense.GetExpensesUseCase
+import com.familyhome.app.domain.usecase.stock.GetLowStockItemsUseCase
+import com.familyhome.app.domain.usecase.user.GetFamilyMembersUseCase
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -21,11 +21,6 @@ class HomeViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
 
-    private lateinit var userUseCases: UserUseCases
-    private lateinit var stockUseCases: StockUseCases
-    private lateinit var expenseUseCases: ExpenseUseCases
-    private lateinit var choreUseCases: GetRecurringTasksUseCase
-
     private fun sha256(s: String) = MessageDigest.getInstance("SHA-256")
         .digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
 
@@ -35,38 +30,35 @@ class HomeViewModelTest {
         pin = sha256("1234"), createdAt = 1L,
     )
 
-    private fun stockItem(id: String, qty: Float, min: Float) = StockItem(
-        id = id, name = "Rice", category = StockCategory.FOOD,
-        quantity = qty, unit = "kg", minQuantity = min,
-        updatedBy = "f1", updatedAt = 1L,
-    )
+    @BeforeEach fun setup() { Dispatchers.setMain(testDispatcher) }
+    @AfterEach fun teardown() { Dispatchers.resetMain() }
 
-    @BeforeEach
-    fun setup() {
-        Dispatchers.setMain(testDispatcher)
-        userUseCases = mockk(relaxed = true)
-        stockUseCases = mockk(relaxed = true)
-        expenseUseCases = mockk(relaxed = true)
-        choreUseCases = mockk(relaxed = true)
+    @Test
+    fun `GetFamilyMembersUseCase returns all users`() = runTest {
+        val useCase = mockk<GetFamilyMembersUseCase>()
+        val wife = User("w1", "Wife", Role.WIFE, "f1", null, sha256("5678"), 2L)
+        every { useCase() } returns flowOf(listOf(fatherUser(), wife))
 
-        every { userUseCases.getAllUsers() } returns flowOf(listOf(fatherUser()))
-        every { stockUseCases.getLowStockItems() } returns flowOf(emptyList())
-        every { expenseUseCases.getExpensesForCurrentMonth(any()) } returns flowOf(emptyList())
-        every { choreUseCases() } returns flowOf(emptyList())
-    }
-
-    @AfterEach
-    fun teardown() {
-        Dispatchers.resetMain()
+        useCase().test {
+            val users = awaitItem()
+            assertEquals(2, users.size)
+            assertTrue(users.any { it.role == Role.FATHER })
+            assertTrue(users.any { it.role == Role.WIFE })
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 
     @Test
-    fun `low stock items are surfaced correctly`() = runTest {
-        val lowItem = stockItem("s1", qty = 1f, min = 3f)
-        every { stockUseCases.getLowStockItems() } returns flowOf(listOf(lowItem))
+    fun `GetLowStockItemsUseCase emits low items`() = runTest {
+        val useCase = mockk<GetLowStockItemsUseCase>()
+        val lowItem = StockItem(
+            id = "s1", name = "Rice", category = StockCategory.FOOD,
+            quantity = 1f, unit = "kg", minQuantity = 3f,
+            updatedBy = "f1", updatedAt = 1L,
+        )
+        every { useCase() } returns flowOf(listOf(lowItem))
 
-        // Verify the use case emits what we expect
-        stockUseCases.getLowStockItems().test {
+        useCase().test {
             val items = awaitItem()
             assertEquals(1, items.size)
             assertTrue(items[0].quantity <= items[0].minQuantity)
@@ -75,26 +67,32 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `all family members are loaded`() = runTest {
-        val wife = User(
-            id = "w1", name = "Wife", role = Role.WIFE,
-            parentId = "f1", avatarUri = null,
-            pin = sha256("5678"), createdAt = 2L,
-        )
-        every { userUseCases.getAllUsers() } returns flowOf(listOf(fatherUser(), wife))
+    fun `GetLowStockItemsUseCase emits empty when all stock ok`() = runTest {
+        val useCase = mockk<GetLowStockItemsUseCase>()
+        every { useCase() } returns flowOf(emptyList())
 
-        userUseCases.getAllUsers().test {
-            val users = awaitItem()
-            assertEquals(2, users.size)
+        useCase().test {
+            val items = awaitItem()
+            assertTrue(items.isEmpty())
             cancelAndIgnoreRemainingEvents()
         }
     }
 
     @Test
-    fun `expenses flow emits empty list when no expenses`() = runTest {
-        expenseUseCases.getExpensesForCurrentMonth(fatherUser()).test {
-            val expenses = awaitItem()
-            assertTrue(expenses.isEmpty())
+    fun `GetRecurringTasksUseCase returns tasks`() = runTest {
+        val useCase = mockk<GetRecurringTasksUseCase>()
+        val task = RecurringTask(
+            id = "t1", taskName = "Wash dishes", frequency = Frequency.DAILY,
+            assignedTo = "f1", lastDoneAt = null,
+            nextDueAt = System.currentTimeMillis() + 86_400_000L,
+            scheduledAt = null, reminderMinutesBefore = null,
+        )
+        every { useCase() } returns flowOf(listOf(task))
+
+        useCase().test {
+            val tasks = awaitItem()
+            assertEquals(1, tasks.size)
+            assertEquals("Wash dishes", tasks[0].taskName)
             cancelAndIgnoreRemainingEvents()
         }
     }

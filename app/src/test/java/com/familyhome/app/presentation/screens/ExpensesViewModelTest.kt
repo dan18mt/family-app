@@ -2,7 +2,9 @@ package com.familyhome.app.presentation.screens
 
 import app.cash.turbine.test
 import com.familyhome.app.domain.model.*
-import com.familyhome.app.domain.usecase.expense.ExpenseUseCases
+import com.familyhome.app.domain.usecase.expense.GetExpensesUseCase
+import com.familyhome.app.domain.usecase.expense.LogExpenseUseCase
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -17,7 +19,6 @@ import java.security.MessageDigest
 class ExpensesViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
-    private lateinit var expenseUseCases: ExpenseUseCases
 
     private fun sha256(s: String) = MessageDigest.getInstance("SHA-256")
         .digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
@@ -26,6 +27,12 @@ class ExpensesViewModelTest {
         id = "f1", name = "Father", role = Role.FATHER,
         parentId = null, avatarUri = null,
         pin = sha256("1234"), createdAt = 1L,
+    )
+
+    private fun kidUser() = User(
+        id = "k1", name = "Kid", role = Role.KID,
+        parentId = "f1", avatarUri = null,
+        pin = sha256("0000"), createdAt = 3L,
     )
 
     private fun expense(id: String, amount: Long, category: ExpenseCategory) = Expense(
@@ -37,24 +44,19 @@ class ExpensesViewModelTest {
         aiExtracted = false,
     )
 
-    @BeforeEach
-    fun setup() {
-        Dispatchers.setMain(testDispatcher)
-        expenseUseCases = mockk(relaxed = true)
-    }
-
-    @AfterEach
-    fun teardown() { Dispatchers.resetMain() }
+    @BeforeEach fun setup() { Dispatchers.setMain(testDispatcher) }
+    @AfterEach fun teardown() { Dispatchers.resetMain() }
 
     @Test
-    fun `getExpensesForCurrentMonth returns all expenses for father`() = runTest {
+    fun `GetExpensesUseCase returns all expenses for father`() = runTest {
+        val useCase = mockk<GetExpensesUseCase>()
         val expenses = listOf(
             expense("e1", 50_000L, ExpenseCategory.GROCERIES),
             expense("e2", 20_000L, ExpenseCategory.TRANSPORT),
         )
-        every { expenseUseCases.getExpensesForCurrentMonth(any()) } returns flowOf(expenses)
+        every { useCase(fatherUser(), any()) } returns flowOf(expenses)
 
-        expenseUseCases.getExpensesForCurrentMonth(fatherUser()).test {
+        useCase(fatherUser(), emptyList()).test {
             val result = awaitItem()
             assertEquals(2, result.size)
             assertEquals(70_000L, result.sumOf { it.amount })
@@ -63,31 +65,31 @@ class ExpensesViewModelTest {
     }
 
     @Test
-    fun `logExpense succeeds for father`() = runTest {
+    fun `LogExpenseUseCase succeeds for father`() = runTest {
+        val useCase = mockk<LogExpenseUseCase>(relaxed = true)
         val actor = fatherUser()
         val expectedExpense = expense("e1", 50_000L, ExpenseCategory.GROCERIES)
-        every {
-            expenseUseCases.logExpense(actor, 50_000L, "Groceries", ExpenseCategory.GROCERIES, null)
-        } returns Result.success(expectedExpense)
+        coEvery { useCase(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns Result.success(expectedExpense)
 
-        val result = expenseUseCases.logExpense(actor, 50_000L, "Groceries", ExpenseCategory.GROCERIES, null)
+        val result = useCase(actor, 50_000L, "IDR", ExpenseCategory.GROCERIES, "Groceries", "f1", null)
         assertTrue(result.isSuccess)
         assertEquals(50_000L, result.getOrNull()?.amount)
     }
 
     @Test
-    fun `logExpense fails for kid`() = runTest {
-        val kid = User(
-            id = "k1", name = "Kid", role = Role.KID,
-            parentId = "f1", avatarUri = null,
-            pin = sha256("0000"), createdAt = 3L,
+    fun `expenses list sums correctly`() = runTest {
+        val useCase = mockk<GetExpensesUseCase>()
+        val expenses = listOf(
+            expense("e1", 100_000L, ExpenseCategory.GROCERIES),
+            expense("e2", 50_000L, ExpenseCategory.HEALTH),
+            expense("e3", 25_000L, ExpenseCategory.TRANSPORT),
         )
-        every {
-            expenseUseCases.logExpense(kid, any(), any(), any(), any())
-        } returns Result.failure(IllegalStateException("Kids cannot log expenses."))
+        every { useCase(fatherUser(), any()) } returns flowOf(expenses)
 
-        val result = expenseUseCases.logExpense(kid, 10_000L, "Candy", ExpenseCategory.OTHER, null)
-        assertTrue(result.isFailure)
-        assertEquals("Kids cannot log expenses.", result.exceptionOrNull()?.message)
+        useCase(fatherUser(), emptyList()).test {
+            val result = awaitItem()
+            assertEquals(175_000L, result.sumOf { it.amount })
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }

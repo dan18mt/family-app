@@ -230,11 +230,17 @@ class LoginViewModelTest {
         every { userRepository.getAllUsers() } returns flowOf(users)
 
         val vm = createViewModel()
-        advanceUntilIdle()
 
         vm.users.test {
-            val emitted = awaitItem()
-            assertEquals(users, emitted)
+            // Skip initial empty state
+            val first = awaitItem()
+            if (first.isEmpty()) {
+                advanceUntilIdle()
+                val second = awaitItem()
+                assertEquals(users, second)
+            } else {
+                assertEquals(users, first)
+            }
             cancelAndIgnoreRemainingEvents()
         }
     }
