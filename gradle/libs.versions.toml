@@ -21,6 +21,22 @@ vico                        = "1.15.0"
 junit                       = "4.13.2"
 junitExt                    = "1.2.1"
 espresso                    = "3.6.1"
+# ── Test additions ─────────────────────────────────────────────────────────────
+junit5                      = "5.10.2"
+junitVintage                = "5.10.2"
+junitPlatformLauncher       = "1.10.2"
+mockk                       = "1.13.10"
+kotlinxCoroutinesTest       = "1.8.1"
+turbine                     = "1.1.0"
+hiltTesting                 = "2.55"
+androidxTestCore            = "1.6.1"
+androidxTestRunner          = "1.6.2"
+androidxTestRules           = "1.6.1"
+# ── Static analysis & quality ─────────────────────────────────────────────────
+detekt                      = "1.23.6"
+jacoco                      = "0.8.12"
+pitest                      = "1.15.0"
+pitestPlugin                = "1.15.0"
 
 [libraries]
 # AndroidX core
@@ -52,6 +68,7 @@ hilt-navigation-compose             = { group = "androidx.hilt",      name = "hi
 room-runtime                        = { group = "androidx.room",      name = "room-runtime",                   version.ref = "room" }
 room-ktx                            = { group = "androidx.room",      name = "room-ktx",                       version.ref = "room" }
 room-compiler                       = { group = "androidx.room",      name = "room-compiler",                  version.ref = "room" }
+room-testing                        = { group = "androidx.room",      name = "room-testing",                   version.ref = "room" }
 
 # DataStore
 datastore-preferences               = { group = "androidx.datastore", name = "datastore-preferences",          version.ref = "datastore" }
@@ -87,10 +104,35 @@ coil-compose                        = { group = "io.coil-kt",         name = "co
 # Vico (Compose-native charts)
 vico-compose-m3                     = { group = "com.patrykandpatrick.vico", name = "compose-m3",              version.ref = "vico" }
 
-# Tests
+# ── Tests ──────────────────────────────────────────────────────────────────────
 junit                               = { group = "junit",              name = "junit",                          version.ref = "junit" }
 androidx-junit                      = { group = "androidx.test.ext",  name = "junit",                          version.ref = "junitExt" }
 androidx-espresso-core              = { group = "androidx.test.espresso", name = "espresso-core",              version.ref = "espresso" }
+
+# JUnit 5
+junit5-api                          = { group = "org.junit.jupiter",  name = "junit-jupiter-api",              version.ref = "junit5" }
+junit5-engine                       = { group = "org.junit.jupiter",  name = "junit-jupiter-engine",           version.ref = "junit5" }
+junit5-params                       = { group = "org.junit.jupiter",  name = "junit-jupiter-params",           version.ref = "junit5" }
+junit-vintage-engine                = { group = "org.junit.vintage",  name = "junit-vintage-engine",           version.ref = "junitVintage" }
+junit-platform-launcher             = { group = "org.junit.platform", name = "junit-platform-launcher",        version.ref = "junitPlatformLauncher" }
+
+# MockK
+mockk                               = { group = "io.mockk",           name = "mockk",                          version.ref = "mockk" }
+mockk-android                       = { group = "io.mockk",           name = "mockk-android",                  version.ref = "mockk" }
+
+# Coroutines test
+kotlinx-coroutines-test             = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test",    version.ref = "kotlinxCoroutinesTest" }
+
+# Turbine (Flow testing)
+turbine                             = { group = "app.cash.turbine",   name = "turbine",                        version.ref = "turbine" }
+
+# Hilt testing
+hilt-android-testing                = { group = "com.google.dagger",  name = "hilt-android-testing",           version.ref = "hiltTesting" }
+
+# AndroidX test
+androidx-test-core                  = { group = "androidx.test",      name = "core-ktx",                       version.ref = "androidxTestCore" }
+androidx-test-runner                = { group = "androidx.test",      name = "runner",                         version.ref = "androidxTestRunner" }
+androidx-test-rules                 = { group = "androidx.test",      name = "rules",                          version.ref = "androidxTestRules" }
 
 [plugins]
 android-application     = { id = "com.android.application",                    version.ref = "agp" }
@@ -99,3 +141,5 @@ kotlin-compose          = { id = "org.jetbrains.kotlin.plugin.compose",        v
 kotlin-serialization    = { id = "org.jetbrains.kotlin.plugin.serialization",  version.ref = "kotlin" }
 hilt-android            = { id = "com.google.dagger.hilt.android",             version.ref = "hilt" }
 ksp                     = { id = "com.google.devtools.ksp",                    version.ref = "ksp" }
+detekt                  = { id = "io.gitlab.arturbosch.detekt",                version.ref = "detekt" }
+pitest                  = { id = "info.solidsoft.pitest",                      version = "1.9.11" }

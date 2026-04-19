@@ -13,6 +13,9 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.detekt)
+    alias(libs.plugins.pitest)
+    jacoco
 }
 
 android {
@@ -25,7 +28,7 @@ android {
         targetSdk               = 35
         versionCode             = 2
         versionName             = "1.1.0"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.familyhome.app.HiltTestRunner"
 
         // Anthropic API key injected at build time from local.properties
         buildConfigField(
@@ -60,7 +63,151 @@ android {
             excludes += "META-INF/io.netty.versions.properties"
         }
     }
+
+    // Make JaCoCo work with JUnit 5
+    testOptions {
+        unitTests.all {
+            it.useJUnitPlatform()
+            it.finalizedBy("jacocoTestReport")
+        }
+        unitTests.isIncludeAndroidResources = true
+        animationsDisabled = true
+    }
 }
+
+// ─── JaCoCo ──────────────────────────────────────────────────────────────────
+
+val jacocoExcludes = listOf(
+    // Hilt generated
+    "**/*_HiltComponents*",
+    "**/*_Factory*",
+    "**/*_MembersInjector*",
+    "**/Hilt_*",
+    "**/*Module_*",
+    // Room generated
+    "**/*Dao_Impl*",
+    "**/*Database_Impl*",
+    // Android framework
+    "**/BuildConfig*",
+    "**/R.class",
+    "**/R$*.class",
+    "**/*Activity*",
+    "**/*Application*",
+    // Compose generated
+    "**/*ComposableSingletons*",
+    // Data binding
+    "**/databinding/**",
+    // Navigation
+    "**/navigation/**",
+)
+
+tasks.register<JacocoReport>("jacocoTestReport") {
+    dependsOn("testDebugUnitTest")
+    group = "verification"
+    description = "Generates JaCoCo coverage report for unit tests."
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+    }
+
+    val kotlinClassesDir = layout.buildDirectory.dir("tmp/kotlin-classes/debug")
+    val javaClassesDir   = layout.buildDirectory.dir("intermediates/javac/debug/classes")
+    classDirectories.setFrom(
+        fileTree(kotlinClassesDir) { exclude(jacocoExcludes) },
+        fileTree(javaClassesDir)   { exclude(jacocoExcludes) },
+    )
+    sourceDirectories.setFrom(files("src/main/java", "src/main/kotlin"))
+    executionData.setFrom(fileTree(layout.buildDirectory) {
+        include("jacoco/testDebugUnitTest.exec")
+    })
+}
+
+tasks.register<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+    dependsOn("jacocoTestReport")
+    group = "verification"
+    description = "Enforces minimum JaCoCo coverage thresholds."
+
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                value   = "COVEREDRATIO"
+                // TODO: raise to 1.0 once coverage is stable
+                minimum = "0.80".toBigDecimal()
+            }
+        }
+    }
+
+    val kotlinClassesDir = layout.buildDirectory.dir("tmp/kotlin-classes/debug")
+    val javaClassesDir   = layout.buildDirectory.dir("intermediates/javac/debug/classes")
+    classDirectories.setFrom(
+        fileTree(kotlinClassesDir) { exclude(jacocoExcludes) },
+        fileTree(javaClassesDir)   { exclude(jacocoExcludes) },
+    )
+    sourceDirectories.setFrom(files("src/main/java", "src/main/kotlin"))
+    executionData.setFrom(fileTree(layout.buildDirectory) {
+        include("jacoco/testDebugUnitTest.exec")
+    })
+}
+
+// ─── Detekt ──────────────────────────────────────────────────────────────────
+
+detekt {
+    config.setFrom(rootProject.file("config/detekt.yml"))
+    buildUponDefaultConfig = true
+    allRules = false
+    source.setFrom(
+        "src/main/java",
+        "src/test/java",
+        "src/androidTest/java",
+    )
+}
+
+tasks.register("detektAll") {
+    group = "verification"
+    description = "Runs Detekt on all source sets."
+    dependsOn(tasks.detekt)
+}
+
+// ─── PITest ──────────────────────────────────────────────────────────────────
+
+pitest {
+    pitestVersion.set("1.15.0")
+    junit5PluginVersion.set("1.2.1")
+    targetClasses.set(listOf(
+        "com.familyhome.app.domain.*",
+        "com.familyhome.app.data.mapper.*",
+        "com.familyhome.app.data.repository.*",
+    ))
+    excludedClasses.set(listOf(
+        "com.familyhome.app.domain.model.*Dto",
+        "*.di.*",
+    ))
+    threads.set(2)
+    outputFormats.set(listOf("HTML", "XML"))
+    mutationThreshold.set(80)
+    coverageThreshold.set(70)
+    testPlugin.set("junit5")
+}
+
+// ─── Quality gate ─────────────────────────────────────────────────────────────
+
+tasks.register("qualityCheck") {
+    group = "verification"
+    description = "Runs Detekt + unit tests + JaCoCo coverage + PITest mutation in order."
+    dependsOn("detektAll", "testDebugUnitTest", "jacocoTestCoverageVerification", "pitest")
+
+    tasks.findByName("testDebugUnitTest")
+        ?.mustRunAfter("detektAll")
+    tasks.findByName("jacocoTestCoverageVerification")
+        ?.mustRunAfter("testDebugUnitTest")
+    tasks.findByName("pitest")
+        ?.mustRunAfter("jacocoTestCoverageVerification")
+}
+
+// ─── Dependencies ─────────────────────────────────────────────────────────────
 
 dependencies {
     // ---------- AndroidX core ----------
@@ -124,12 +271,36 @@ dependencies {
     // ---------- Vico (charts) ----------
     implementation(libs.vico.compose.m3)
 
-    // ---------- Tests ----------
+    // ────── Unit Tests ──────────────────────────────────────────────────────
+    testImplementation(libs.junit5.api)
+    testImplementation(libs.junit5.params)
+    testRuntimeOnly(libs.junit5.engine)
+    testRuntimeOnly(libs.junit.vintage.engine)
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.mockk)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.turbine)
+    // Keep JUnit 4 for legacy — removed because JUnit5 via vintage covers it
     testImplementation(libs.junit)
+
+    // ────── Instrumented / Integration Tests ───────────────────────────────
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
+    androidTestImplementation(libs.room.testing)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(libs.hilt.android.testing)
+    androidTestImplementation(libs.mockk.android)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules)
+    kspAndroidTest(libs.hilt.compiler)
+
+    // ---------- Debug ----------
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+    // ---------- Detekt ----------
+    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:${libs.versions.detekt.get()}")
 }
