@@ -97,8 +97,8 @@ fun ExpensesScreen(
         AddExpenseDialog(
             customCategories = state.customCategories,
             onDismiss = { showAddDialog = false },
-            onConfirm = { amount, category, customCatId, description ->
-                viewModel.logExpense(amount, category, customCatId, description, null)
+            onConfirm = { amount, category, customCatId, description, expenseDate ->
+                viewModel.logExpense(amount, category, customCatId, description, null, expenseDate)
                 showAddDialog = false
             },
         )
@@ -264,7 +264,7 @@ fun ExpensesScreen(
                 item {
                     Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                         Text(
-                            if (state.expenses.isEmpty()) "No expenses yet."
+                            if (state.expenses.isEmpty()) "💸 No expenses yet. Tap + to add one."
                             else "No expenses match the current filter.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -725,13 +725,31 @@ private fun ExpenseRow(
 private fun AddExpenseDialog(
     customCategories: List<CustomExpenseCategory>,
     onDismiss: () -> Unit,
-    onConfirm: (Long, ExpenseCategory, String?, String) -> Unit,
+    onConfirm: (Long, ExpenseCategory, String?, String, Long) -> Unit,
 ) {
-    var amountText  by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var builtInCat  by remember { mutableStateOf(ExpenseCategory.OTHER) }
-    var customCatId by remember { mutableStateOf<String?>(null) }
-    var expanded    by remember { mutableStateOf(false) }
+    var amountText   by remember { mutableStateOf("") }
+    var description  by remember { mutableStateOf("") }
+    var builtInCat   by remember { mutableStateOf(ExpenseCategory.OTHER) }
+    var customCatId  by remember { mutableStateOf<String?>(null) }
+    var expanded     by remember { mutableStateOf(false) }
+    var selectedDate by remember { mutableStateOf(System.currentTimeMillis()) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDate)
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { selectedDate = it }
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            },
+        ) { DatePicker(state = datePickerState) }
+    }
 
     val selectedLabel = customCatId?.let { id -> customCategories.find { it.id == id }?.name }
         ?: builtInCat.displayName
@@ -751,6 +769,13 @@ private fun AddExpenseDialog(
                     value = description, onValueChange = { description = it },
                     label = { Text("Description") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                 )
+                OutlinedButton(
+                    onClick = { showDatePicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    val fmt = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
+                    Text("Date: " + fmt.format(java.util.Date(selectedDate)))
+                }
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                     OutlinedTextField(
                         value = selectedLabel, onValueChange = {}, readOnly = true,
@@ -783,7 +808,7 @@ private fun AddExpenseDialog(
         confirmButton = {
             Button(onClick = {
                 val amount = amountText.toLongOrNull()?.times(100) ?: return@Button
-                onConfirm(amount, builtInCat, customCatId, description)
+                onConfirm(amount, builtInCat, customCatId, description, selectedDate)
             }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },

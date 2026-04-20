@@ -5,6 +5,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -84,16 +86,52 @@ fun SyncSettingsScreen(
             // Father's server auto-starts when he opens the app.
             // The host IP is saved automatically during onboarding.
             // This field is a fallback in case the Family Leader's IP changes.
-            Text("Host IP Override", style = MaterialTheme.typography.titleMedium)
+            Text("Sync Host", style = MaterialTheme.typography.titleMedium)
+
+            // Auto-discovered IP banner
+            if (state.discoveredIp != null) {
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
+                        Column {
+                            Text("Auto-discovered", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary)
+                            Text(state.discoveredIp!!, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+
+            // Scan button
+            OutlinedButton(
+                onClick = viewModel::scanForHost,
+                enabled = !state.isScanning,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (state.isScanning) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Scanning for host...")
+                } else {
+                    Icon(Icons.Default.Search, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Auto-scan for host")
+                }
+            }
+
             Text(
-                "The host IP is set automatically during onboarding. Only change this if the Family Leader's phone got a new IP address.",
+                "Manual override — only needed if auto-scan fails:",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             OutlinedTextField(
                 value         = hostIpInput,
                 onValueChange = { hostIpInput = it },
-                label         = { Text("Family Leader's IP address (e.g. 192.168.1.5)") },
+                label         = { Text("Family Leader's IP address") },
                 singleLine    = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier      = Modifier.fillMaxWidth(),
@@ -101,7 +139,7 @@ fun SyncSettingsScreen(
             Button(
                 onClick  = { viewModel.saveHostIp(hostIpInput) },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Save") }
+            ) { Text("Save IP") }
 
             Button(
                 onClick  = viewModel::syncNow,

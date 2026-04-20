@@ -30,6 +30,9 @@ import com.familyhome.app.domain.repository.UserRepository
 import com.familyhome.app.presentation.navigation.AppNavGraph
 import com.familyhome.app.presentation.navigation.Screen
 import com.familyhome.app.presentation.theme.FamilyHomeTheme
+import com.familyhome.app.presentation.theme.ThemePreference
+import com.familyhome.app.presentation.theme.ThemeViewModel
+import androidx.compose.foundation.isSystemInDarkTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
@@ -71,7 +74,14 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            FamilyHomeTheme {
+            val themeVm: ThemeViewModel = hiltViewModel()
+            val themePref by themeVm.themePreference.collectAsStateWithLifecycle()
+            val isDark = when (themePref) {
+                ThemePreference.LIGHT  -> false
+                ThemePreference.DARK   -> true
+                ThemePreference.SYSTEM -> isSystemInDarkTheme()
+            }
+            FamilyHomeTheme(darkTheme = isDark) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     // Show rationale dialogs if permissions were denied
                     if (showNotificationRationale) {

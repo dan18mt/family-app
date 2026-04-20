@@ -40,6 +40,8 @@ import com.familyhome.app.presentation.components.DraggableFab
 import com.familyhome.app.presentation.components.SectionHeader
 import com.familyhome.app.presentation.navigation.Screen
 import com.familyhome.app.presentation.theme.BudgetWarningColor
+import com.familyhome.app.domain.helper.HijriCalendarHelper
+import com.familyhome.app.presentation.theme.ThemeViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -50,6 +52,7 @@ fun HomeScreen(
     onNavigateToTab: (String) -> Unit = {},
     currentTabRoute: String = Screen.Home.route,
     viewModel: HomeViewModel = hiltViewModel(),
+    themeVm: ThemeViewModel = hiltViewModel(),
 ) {
     val state              by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState  = remember { SnackbarHostState() }
@@ -135,6 +138,7 @@ fun HomeScreen(
                     onNotifications = { onNavigateTo(Screen.Notifications) },
                     onSync          = { viewModel.manualSync() },
                     onLanguage      = { showLanguageDialog = true },
+                    onThemeToggle   = { themeVm.cycleTheme() },
                 )
             }
 
@@ -176,6 +180,37 @@ fun HomeScreen(
                 }
             } else {
                 item { Spacer(Modifier.height(16.dp)) }
+            }
+
+            // ── Today at a glance ────────────────────────────────────────────
+            item {
+                Spacer(Modifier.height(8.dp))
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(lowCount.toString(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold,
+                                color = if (lowCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                            Text("Low Stock", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        VerticalDivider(modifier = Modifier.height(40.dp))
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(budgetCount.toString(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold,
+                                color = if (budgetCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                            Text("Budget Alerts", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        VerticalDivider(modifier = Modifier.height(40.dp))
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(state.familyMembers.size.toString(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary)
+                            Text("Members", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
             }
 
             // ── Quick access grid ────────────────────────────────────────────
@@ -329,6 +364,7 @@ private fun HeroBanner(
     onNotifications: () -> Unit,
     onSync: () -> Unit,
     onLanguage: () -> Unit,
+    onThemeToggle: () -> Unit = {},
 ) {
     val hour     = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val greeting = when {
@@ -338,6 +374,8 @@ private fun HeroBanner(
         else      -> "Good evening"
     }
     val dateStr = SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(Date())
+    val hijriDate = HijriCalendarHelper.currentHijriDate()
+    val hijriStr = hijriDate.day.toString() + " " + HijriCalendarHelper.monthDisplayName(hijriDate.month) + " " + hijriDate.year + " H"
 
     Box(
         modifier = Modifier
@@ -376,6 +414,13 @@ private fun HeroBanner(
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.6f),
                 )
+                if (hijriStr.isNotEmpty()) {
+                    Text(
+                        text  = hijriStr,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.5f),
+                    )
+                }
             }
             BadgedBox(badge = {
                 if (unreadCount > 0) Badge { Text(unreadCount.toString()) }
@@ -397,6 +442,9 @@ private fun HeroBanner(
             }
             IconButton(onClick = onLanguage) {
                 Icon(Icons.Default.Language, null, tint = Color.White)
+            }
+            IconButton(onClick = onThemeToggle) {
+                Icon(Icons.Default.DarkMode, null, tint = Color.White)
             }
         }
     }

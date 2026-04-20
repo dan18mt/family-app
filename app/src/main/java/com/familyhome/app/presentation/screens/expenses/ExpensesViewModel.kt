@@ -144,6 +144,7 @@ class ExpensesViewModel @Inject constructor(
         customCategoryId: String?,
         description: String,
         receiptUri: String?,
+        expenseDate: Long = System.currentTimeMillis(),
     ) {
         val user = _state.value.currentUser ?: return
         viewModelScope.launch {
@@ -154,6 +155,7 @@ class ExpensesViewModel @Inject constructor(
                 description      = description,
                 paidByUserId     = user.id,
                 receiptUri       = receiptUri,
+                expenseDate      = expenseDate,
                 customCategoryId = customCategoryId,
             ).onFailure { e -> _state.update { it.copy(error = e.message) } }
         }
