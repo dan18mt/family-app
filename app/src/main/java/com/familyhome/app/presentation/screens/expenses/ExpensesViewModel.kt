@@ -29,7 +29,8 @@ data class ExpensesUiState(
     val customCategories: List<CustomExpenseCategory>           = emptyList(),
     val budgetAlerts: List<CheckBudgetAlertUseCase.BudgetAlert> = emptyList(),
     val budgets: List<Budget>                                   = emptyList(),
-    val totalThisMonth: Long                                    = 0L,
+    /** Epoch-millis for the start of the active period (payroll-based monthly or week). */
+    val currentPeriodStartMillis: Long                          = 0L,
     val selectedChartPeriod: ChartPeriod                        = ChartPeriod.MONTHLY,
     val selectedMemberId: String?                               = null,
     val payrollStartDay: Int                                    = 1,
@@ -45,21 +46,46 @@ data class ExpensesUiState(
     val isLoading: Boolean                                      = true,
     val error: String?                                          = null,
 ) {
-    /** Expenses visible in the list, filtered by date range and category. */
+    /**
+     * Total spending that matches the active filters (member, date range or period,
+     * but NOT category — the summary card shows all-category totals).
+     * Recomputes automatically whenever expenses, filters, or period start change.
+     */
+    val totalThisMonth: Long
+        get() {
+            val from = dateRangeFrom
+            val to   = dateRangeTo
+            return expenses.filter { expense ->
+                val memberOk = selectedMemberId == null || expense.paidBy == selectedMemberId
+                val dateOk = if (from != null || to != null) {
+                    expense.expenseDate >= (from ?: Long.MIN_VALUE) &&
+                        expense.expenseDate <= (to ?: Long.MAX_VALUE)
+                } else {
+                    expense.expenseDate >= currentPeriodStartMillis
+                }
+                memberOk && dateOk
+            }.sumOf { it.amount }
+        }
+
+    /**
+     * Expenses shown in the list.  Respects member, date range / period, and category
+     * filters — all four filter dimensions that the UI exposes.
+     */
     val displayedExpenses: List<Expense>
         get() {
             val from = dateRangeFrom
             val to   = dateRangeTo
             return expenses.filter { expense ->
-                val dateOk = when {
-                    from != null && to != null -> expense.expenseDate in from..to
-                    from != null               -> expense.expenseDate >= from
-                    to   != null               -> expense.expenseDate <= to
-                    else                       -> true
+                val memberOk = selectedMemberId == null || expense.paidBy == selectedMemberId
+                val dateOk = if (from != null || to != null) {
+                    expense.expenseDate >= (from ?: Long.MIN_VALUE) &&
+                        expense.expenseDate <= (to ?: Long.MAX_VALUE)
+                } else {
+                    expense.expenseDate >= currentPeriodStartMillis
                 }
                 val catOk = selectedCategoryKey == null ||
                     (expense.customCategoryId ?: expense.category.name) == selectedCategoryKey
-                dateOk && catOk
+                memberOk && dateOk && catOk
             }
         }
 
@@ -94,7 +120,14 @@ class ExpensesViewModel @Inject constructor(
         viewModelScope.launch {
             val payrollDay = dataStore.data.first()[payrollStartDayKey] ?: 1
             val user = getCurrentUserUseCase()
-            _state.update { it.copy(currentUser = user, payrollStartDay = payrollDay) }
+            val periodStart = computePeriodStart(ChartPeriod.MONTHLY, payrollDay)
+            _state.update {
+                it.copy(
+                    currentUser = user,
+                    payrollStartDay = payrollDay,
+                    currentPeriodStartMillis = periodStart,
+                )
+            }
             if (user != null) {
                 val alerts = checkBudgetAlertUseCase(user.id, payrollDay)
                 _state.update { it.copy(budgetAlerts = alerts) }
@@ -130,10 +163,9 @@ class ExpensesViewModel @Inject constructor(
                 val visible = expenses.filter { expense ->
                     PermissionFilter.canSee(user, expense, current.allUsers)
                 }
-                val total = visible
-                    .filter { it.expenseDate >= currentMonthStart() }
-                    .sumOf { it.amount }
-                _state.update { it.copy(expenses = visible, totalThisMonth = total, isLoading = false) }
+                // totalThisMonth is now a computed property on ExpensesUiState — no need to
+                // calculate it here; just store the filtered expense list.
+                _state.update { it.copy(expenses = visible, isLoading = false) }
             }
         }
     }
@@ -231,12 +263,29 @@ class ExpensesViewModel @Inject constructor(
     }
 
     fun setChartPeriod(period: ChartPeriod) {
-        // Switching period clears the custom date range
-        _state.update { it.copy(selectedChartPeriod = period, dateRangeFrom = null, dateRangeTo = null) }
+        // Switching period clears the custom date range and updates the period start so that
+        // totalThisMonth and displayedExpenses recompute correctly.
+        val periodStart = computePeriodStart(period, _state.value.payrollStartDay)
+        _state.update {
+            it.copy(
+                selectedChartPeriod = period,
+                dateRangeFrom = null,
+                dateRangeTo = null,
+                currentPeriodStartMillis = periodStart,
+            )
+        }
     }
 
     fun setSelectedMember(userId: String?) {
         _state.update { it.copy(selectedMemberId = userId) }
+        // Refresh budget alerts for the newly visible member so the warning badges reflect the
+        // selected person's budgets, not the logged-in user's.
+        viewModelScope.launch {
+            val user = _state.value.currentUser ?: return@launch
+            val targetId = userId ?: user.id
+            val alerts = checkBudgetAlertUseCase(targetId, _state.value.payrollStartDay)
+            _state.update { it.copy(budgetAlerts = alerts) }
+        }
     }
 
     fun setDateRange(from: Long?, to: Long?) {
@@ -250,7 +299,10 @@ class ExpensesViewModel @Inject constructor(
     /** Persist and apply the new payroll start day (1–31). */
     fun setPayrollStartDay(day: Int) {
         val clamped = day.coerceIn(1, 31)
-        _state.update { it.copy(payrollStartDay = clamped) }
+        // Recompute period start immediately so totalThisMonth and displayedExpenses update in
+        // the same frame as the payroll day change, before the async DataStore write completes.
+        val periodStart = computePeriodStart(_state.value.selectedChartPeriod, clamped)
+        _state.update { it.copy(payrollStartDay = clamped, currentPeriodStartMillis = periodStart) }
         viewModelScope.launch {
             dataStore.edit { prefs -> prefs[payrollStartDayKey] = clamped }
             // Refresh budget alerts with the new period
@@ -262,22 +314,37 @@ class ExpensesViewModel @Inject constructor(
 
     fun clearError() = _state.update { it.copy(error = null) }
 
-    private fun currentMonthStart(): Long {
-        val payrollDay = _state.value.payrollStartDay
+    /**
+     * Computes the epoch-millis for the start of the current period given [period] and
+     * [payrollStartDay].  For MONTHLY, the period begins on [payrollStartDay] (clamped to the
+     * month's last day) of the current or previous calendar month, whichever is most recent.
+     * For WEEKLY, the period begins on the most recent Monday at midnight.
+     */
+    internal fun computePeriodStart(period: ChartPeriod, payrollStartDay: Int): Long {
         val cal = Calendar.getInstance()
-        val today = cal.get(Calendar.DAY_OF_MONTH)
-        val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-        val effectiveDay = minOf(payrollDay, maxDay)
-        if (today < effectiveDay) {
-            cal.add(Calendar.MONTH, -1)
-            val prevMaxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-            cal.set(Calendar.DAY_OF_MONTH, minOf(payrollDay, prevMaxDay))
-        } else {
-            cal.set(Calendar.DAY_OF_MONTH, effectiveDay)
+        return when (period) {
+            ChartPeriod.WEEKLY -> {
+                cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+                cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+                cal.timeInMillis
+            }
+            ChartPeriod.MONTHLY -> {
+                val today = cal.get(Calendar.DAY_OF_MONTH)
+                val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                val effectiveDay = minOf(payrollStartDay, maxDay)
+                if (today < effectiveDay) {
+                    cal.add(Calendar.MONTH, -1)
+                    val prevMaxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                    cal.set(Calendar.DAY_OF_MONTH, minOf(payrollStartDay, prevMaxDay))
+                } else {
+                    cal.set(Calendar.DAY_OF_MONTH, effectiveDay)
+                }
+                cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+                cal.timeInMillis
+            }
         }
-        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
-        cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
-        return cal.timeInMillis
     }
 
     companion object {
