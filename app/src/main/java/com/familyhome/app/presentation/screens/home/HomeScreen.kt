@@ -41,6 +41,7 @@ import com.familyhome.app.presentation.components.SectionHeader
 import com.familyhome.app.presentation.navigation.Screen
 import com.familyhome.app.presentation.theme.BudgetWarningColor
 import com.familyhome.app.domain.helper.HijriCalendarHelper
+import com.familyhome.app.presentation.theme.ThemePreference
 import com.familyhome.app.presentation.theme.ThemeViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -55,6 +56,7 @@ fun HomeScreen(
     themeVm: ThemeViewModel = hiltViewModel(),
 ) {
     val state              by viewModel.state.collectAsStateWithLifecycle()
+    val themePref          by themeVm.themePreference.collectAsStateWithLifecycle()
     val snackbarHostState  = remember { SnackbarHostState() }
     var roleDialogRequest  by remember { mutableStateOf<JoinRequestDto?>(null) }
     var kickTarget         by remember { mutableStateOf<User?>(null) }
@@ -134,6 +136,7 @@ fun HomeScreen(
                     user            = state.currentUser,
                     unreadCount     = state.unreadNotificationCount,
                     isSyncing       = state.isSyncing,
+                    themePref       = themePref,
                     onAvatar        = { pickImageLauncher.launch("image/*") },
                     onNotifications = { onNavigateTo(Screen.Notifications) },
                     onSync          = { viewModel.manualSync() },
@@ -360,6 +363,7 @@ private fun HeroBanner(
     user: User?,
     unreadCount: Int,
     isSyncing: Boolean,
+    themePref: ThemePreference = ThemePreference.SYSTEM,
     onAvatar: () -> Unit,
     onNotifications: () -> Unit,
     onSync: () -> Unit,
@@ -444,7 +448,12 @@ private fun HeroBanner(
                 Icon(Icons.Default.Language, null, tint = Color.White)
             }
             IconButton(onClick = onThemeToggle) {
-                Icon(Icons.Default.DarkMode, null, tint = Color.White)
+                val themeIcon = when (themePref) {
+                    ThemePreference.LIGHT  -> Icons.Default.LightMode
+                    ThemePreference.DARK   -> Icons.Default.DarkMode
+                    ThemePreference.SYSTEM -> Icons.Default.Brightness4
+                }
+                Icon(themeIcon, contentDescription = "Toggle theme", tint = Color.White)
             }
         }
     }
