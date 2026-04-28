@@ -6,7 +6,6 @@ plugins {
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
     alias(libs.plugins.detekt)
-    alias(libs.plugins.pitest)
     jacoco
 }
 
@@ -157,23 +156,51 @@ tasks.register("detektAll") {
 }
 
 // ─── PITest Mutation Testing ──────────────────────────────────────────────────
+// The info.solidsoft.pitest Gradle plugin does not support Android modules
+// (its extension is only available in plain JVM projects). We declare a
+// configuration + JavaExec task so mutation testing still works for the pure-
+// Kotlin domain and data-mapper layers that compile to regular class files.
 
-pitest {
-    targetClasses.set(listOf(
-        "com.familyhome.app.domain.*",
-        "com.familyhome.app.data.mapper.*",
-        "com.familyhome.app.data.repository.*",
-    ))
-    targetTests.set(listOf(
-        "com.familyhome.app.domain.*",
-        "com.familyhome.app.data.*",
-    ))
-    pitestVersion.set(libs.versions.pitest.get())
-    junit5PluginVersion.set("1.2.1")
-    mutationThreshold.set(80)
-    threads.set(4)
-    outputFormats.set(listOf("HTML", "XML"))
-    timestampedReports.set(false)
+val pitestConf: Configuration by configurations.creating
+
+dependencies {
+    pitestConf("org.pitest:pitest-command-line:${libs.versions.pitest.get()}")
+    pitestConf("org.pitest:pitest-junit5-plugin:1.2.1")
+}
+
+tasks.register<JavaExec>("pitest") {
+    group = "verification"
+    description = "Runs PITest mutation testing on domain and data layers."
+    dependsOn("testDebugUnitTest")
+
+    mainClass.set("org.pitest.mutationtest.commandline.MutationCoverageReport")
+    classpath = pitestConf
+
+    val classesDir   = layout.buildDirectory.dir("tmp/kotlin-classes/debug").get().asFile
+    val testClassDir = layout.buildDirectory.dir("tmp/kotlin-classes/debugUnitTest").get().asFile
+    val sourceDir    = file("src/main/java")
+    val reportDir    = layout.buildDirectory.dir("reports/pitest").get().asFile
+
+    // Build the runtime classpath from the debug unit-test compile classpath
+    doFirst {
+        val cp = (classesDir.absolutePath +
+            java.io.File.pathSeparator + testClassDir.absolutePath +
+            java.io.File.pathSeparator + pitestConf.asPath +
+            java.io.File.pathSeparator +
+            configurations.getByName("debugUnitTestRuntimeClasspath").asPath)
+
+        args = listOf(
+            "--targetClasses",  "com.familyhome.app.domain.*,com.familyhome.app.data.mapper.*,com.familyhome.app.data.repository.*",
+            "--targetTests",    "com.familyhome.app.domain.*,com.familyhome.app.data.*",
+            "--sourceDirs",     sourceDir.absolutePath,
+            "--classPath",      cp,
+            "--reportDir",      reportDir.absolutePath,
+            "--outputFormats",  "HTML,XML",
+            "--threads",        "4",
+            "--mutationThreshold", "80",
+            "--timeoutConst",   "8000",
+        )
+    }
 }
 
 // ─── Quality gate ─────────────────────────────────────────────────────────────
