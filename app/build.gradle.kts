@@ -35,10 +35,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -56,6 +52,12 @@ android {
         }
         unitTests.isIncludeAndroidResources = true
         animationsDisabled = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -183,11 +185,11 @@ tasks.register<JavaExec>("pitest") {
 
     // Build the runtime classpath from the debug unit-test compile classpath
     doFirst {
+        val sep = File.pathSeparator
         val cp = (classesDir.absolutePath +
-            java.io.File.pathSeparator + testClassDir.absolutePath +
-            java.io.File.pathSeparator + pitestConf.asPath +
-            java.io.File.pathSeparator +
-            configurations.getByName("debugUnitTestRuntimeClasspath").asPath)
+            sep + testClassDir.absolutePath +
+            sep + pitestConf.asPath +
+            sep + configurations.getByName("debugUnitTestRuntimeClasspath").asPath)
 
         args = listOf(
             "--targetClasses",  "com.familyhome.app.domain.*,com.familyhome.app.data.mapper.*,com.familyhome.app.data.repository.*",
