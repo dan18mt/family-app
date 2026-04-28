@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
     alias(libs.plugins.detekt)
+    alias(libs.plugins.pitest)
     jacoco
 }
 
@@ -155,17 +156,39 @@ tasks.register("detektAll") {
     dependsOn(tasks.detekt)
 }
 
+// ─── PITest Mutation Testing ──────────────────────────────────────────────────
+
+pitest {
+    targetClasses.set(listOf(
+        "com.familyhome.app.domain.*",
+        "com.familyhome.app.data.mapper.*",
+        "com.familyhome.app.data.repository.*",
+    ))
+    targetTests.set(listOf(
+        "com.familyhome.app.domain.*",
+        "com.familyhome.app.data.*",
+    ))
+    pitestVersion.set(libs.versions.pitest.get())
+    junit5PluginVersion.set("1.2.1")
+    mutationThreshold.set(80)
+    threads.set(4)
+    outputFormats.set(listOf("HTML", "XML"))
+    timestampedReports.set(false)
+}
+
 // ─── Quality gate ─────────────────────────────────────────────────────────────
 
 tasks.register("qualityCheck") {
     group = "verification"
     description = "Runs Detekt + unit tests + JaCoCo coverage + PITest mutation in order."
-    dependsOn("detektAll", "testDebugUnitTest", "jacocoTestCoverageVerification")
+    dependsOn("detektAll", "testDebugUnitTest", "jacocoTestCoverageVerification", "pitest")
 
     tasks.findByName("testDebugUnitTest")
         ?.mustRunAfter("detektAll")
     tasks.findByName("jacocoTestCoverageVerification")
         ?.mustRunAfter("testDebugUnitTest")
+    tasks.findByName("pitest")
+        ?.mustRunAfter("jacocoTestCoverageVerification")
 }
 
 // ─── Dependencies ─────────────────────────────────────────────────────────────
